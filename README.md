@@ -78,10 +78,10 @@ npm run build
 
 ---
 
-## Development Roadmap
+## Development Roadmap (All Stages Complete)
 
-- [x] **Stage 1**: Setup, design tokens, 3 themes, `BackgroundLayers`, layout, and `TopBar`.
-- [ ] **Stage 2**: Typing engine hook (`useTypingEngine`), memoized `TypingArea`, and lit-up `VirtualKeyboard`.
-- [ ] **Stage 3**: Real-time metrics calculations, result report screen, Recharts progression line chart, and keyboard miss heatmap.
-- [ ] **Stage 4**: Versioned `localStorage` history, beginner lessons with finger guides, and comprehensive settings panel.
-- [ ] **Stage 5**: Interaction polish, edge-case audit, and accessibility verification.
+- [x] **Stage 1**: Setup, design tokens, 3 themes (Midnight, Ember, Paper), `BackgroundLayers` with depth, noise, and vignette, layout, and minimal `TopBar`.
+- [x] **Stage 2**: High-velocity typing engine hook (`useTypingEngine`), memoized `TypingArea` with smooth caret, tactile mechanical switch Web Audio synthesizer, and lit-up `VirtualKeyboard` with 150ms keycap fading.
+- [x] **Stage 3**: Exact real-time metrics calculations (Net WPM, Raw WPM, Accuracy, Consistency CV), comprehensive result report screen with animated hero counter, Recharts progression line chart, and keyboard miss heatmap.
+- [x] **Stage 4**: Versioned `localStorage` history (`keyflow:v1`), 5-step beginner touch-typing curriculum with interactive SVG finger guide, and comprehensive settings panel (audio sliders, layout picker, font scale, caret options).
+- [x] **Stage 5**: Interaction polish, edge-case audit (zero keystrokes, fast typing, blur pause, corrupted storage), accessibility contrast verification, and zero dead buttons.
