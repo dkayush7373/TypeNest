@@ -1,28 +1,59 @@
 'use client';
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { ActiveTab, TestConfig, TestResult } from '@/types';
+import { ActiveTab, TestConfig, TestResult, UserSettings } from '@/types';
 import { BackgroundLayers } from '@/components/BackgroundLayers';
 import { TopBar } from '@/components/TopBar';
 import { StatsBar } from '@/components/StatsBar';
 import { TypingArea } from '@/components/TypingArea';
 import { VirtualKeyboard } from '@/components/VirtualKeyboard';
 import { ResultScreen } from '@/components/ResultScreen';
+import { HistoryView } from '@/components/HistoryView';
+import { LearnView, LESSONS_PROGRESS_KEY, LessonProgress } from '@/components/LearnView';
+import { SettingsView } from '@/components/SettingsView';
 import { useTypingEngine } from '@/hooks/useTypingEngine';
 import { useSound } from '@/hooks/useSound';
+import { useHistory } from '@/hooks/useHistory';
 import { calculateMetrics, buildTestResult } from '@/lib/metrics';
 import { getSafeStorage, setSafeStorage } from '@/lib/storage';
-import { RefreshCw, Command, Keyboard as KeyboardIcon } from 'lucide-react';
+import { Lesson, LESSONS } from '@/lib/lessons';
+import { RefreshCw, Command, Keyboard as KeyboardIcon, Sparkles } from 'lucide-react';
 
+const SETTINGS_STORAGE_KEY = 'keyflow:settings';
 const PB_STORAGE_KEY = 'keyflow:personal_best';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('test');
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [showKeyboard, setShowKeyboard] = useState(true);
+  const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
+  const [isPracticingWeakKeys, setIsPracticingWeakKeys] = useState(false);
+
+  // User Settings with instant storage sync
+  const [settings, setSettings] = useState<UserSettings>(() => {
+    return getSafeStorage<UserSettings>(SETTINGS_STORAGE_KEY, {
+      theme: 'midnight',
+      fontSize: 'medium',
+      caretStyle: 'line',
+      soundEnabled: true,
+      soundVolume: 0.45,
+      keyboardVisible: true,
+      fingerColorsEnabled: false,
+      layout: 'qwerty',
+    });
+  });
+
+  const handleUpdateSettings = useCallback((partial: Partial<UserSettings>) => {
+    setSettings((prev) => {
+      const next = { ...prev, ...partial };
+      setSafeStorage(SETTINGS_STORAGE_KEY, next);
+      return next;
+    });
+  }, []);
+
+  // History system
+  const { history, stats, saveResult, clearHistory } = useHistory();
   const [previousResult, setPreviousResult] = useState<TestResult | null>(null);
 
-  // Personal Best from safe storage
+  // Personal Best
   const [personalBest, setPersonalBest] = useState<number | null>(() => {
     return getSafeStorage<number | null>(PB_STORAGE_KEY, null);
   });
@@ -37,7 +68,10 @@ export default function Home() {
   });
 
   // Sound generator
-  const { playKeySound, getAudioContext } = useSound(soundEnabled, 0.45);
+  const { playKeySound, getAudioContext } = useSound(
+    settings.soundEnabled,
+    settings.soundVolume
+  );
 
   const handlePlaySound = useCallback(
     (type: 'standard' | 'space' | 'error') => {
@@ -48,7 +82,6 @@ export default function Home() {
 
   // Typing engine
   const engine = useTypingEngine(config, handlePlaySound);
-
   const isRunning = engine.status === 'running';
 
   // Compute test result once finished
@@ -75,9 +108,13 @@ export default function Home() {
     engine.endTime,
   ]);
 
-  // Synchronize personal best when test finishes
+  // Handle test completion side-effects: auto-save to history, update PB, update lesson progression
   useEffect(() => {
     if (engine.status === 'finished' && currentResult) {
+      // 1. Save to History
+      saveResult(currentResult);
+
+      // 2. Personal Best Sync
       const storedPb = getSafeStorage<number | null>(PB_STORAGE_KEY, null);
       if (storedPb === null || currentResult.netWpm > storedPb) {
         setSafeStorage(PB_STORAGE_KEY, currentResult.netWpm);
@@ -86,8 +123,37 @@ export default function Home() {
         }, 0);
         return () => clearTimeout(timer);
       }
+
+      // 3. Lesson Progression Sync if drill completed
+      if (activeLesson) {
+        const storedProgress = getSafeStorage<LessonProgress>(LESSONS_PROGRESS_KEY, {
+          unlockedLessonIds: ['home-row'],
+          lessonBestAccuracy: {},
+        });
+
+        const prevBest = storedProgress.lessonBestAccuracy[activeLesson.id] || 0;
+        const newBest = Math.max(prevBest, currentResult.accuracy);
+        const updatedAccMap = {
+          ...storedProgress.lessonBestAccuracy,
+          [activeLesson.id]: newBest,
+        };
+
+        const unlockedIds = [...storedProgress.unlockedLessonIds];
+        if (currentResult.accuracy >= activeLesson.requiredAccuracy) {
+          const currentIdx = LESSONS.findIndex((l) => l.id === activeLesson.id);
+          const nextLesson = LESSONS[currentIdx + 1];
+          if (nextLesson && !unlockedIds.includes(nextLesson.id)) {
+            unlockedIds.push(nextLesson.id);
+          }
+        }
+
+        setSafeStorage(LESSONS_PROGRESS_KEY, {
+          unlockedLessonIds: unlockedIds,
+          lessonBestAccuracy: updatedAccMap,
+        });
+      }
     }
-  }, [engine.status, currentResult]);
+  }, [engine.status, currentResult, activeLesson, saveResult]);
 
   const handleTryAgain = () => {
     if (currentResult) {
@@ -100,6 +166,25 @@ export default function Home() {
     if (currentResult) {
       setPreviousResult(currentResult);
     }
+    setActiveLesson(null);
+    setIsPracticingWeakKeys(false);
+    engine.resetTest();
+  };
+
+  // Launch focused weak keys practice
+  const handlePracticeWeakKeys = (weakKeys: string[]) => {
+    if (weakKeys.length === 0) return;
+    setIsPracticingWeakKeys(true);
+    setActiveLesson(null);
+    setActiveTab('test');
+    engine.resetTest();
+  };
+
+  // Launch lesson practice drill
+  const handleStartLessonPractice = (lesson: Lesson) => {
+    setActiveLesson(lesson);
+    setIsPracticingWeakKeys(false);
+    setActiveTab('test');
     engine.resetTest();
   };
 
@@ -119,9 +204,16 @@ export default function Home() {
       {/* Top Bar with Brand, Nav, and Theme Switcher */}
       <TopBar
         activeTab={activeTab}
-        onTabChange={setActiveTab}
-        soundEnabled={soundEnabled}
-        onToggleSound={() => setSoundEnabled((prev) => !prev)}
+        onTabChange={(tab) => {
+          setActiveTab(tab);
+          if (tab === 'test') {
+            engine.resetTest();
+          }
+        }}
+        soundEnabled={settings.soundEnabled}
+        onToggleSound={() =>
+          handleUpdateSettings({ soundEnabled: !settings.soundEnabled })
+        }
       />
 
       {/* Main Content Workspace */}
@@ -132,8 +224,47 @@ export default function Home() {
           <p>KeyFlow is optimized for desktop and tactile mechanical typing experiences.</p>
         </div>
 
+        {/* 1. TEST TAB */}
         {activeTab === 'test' && (
           <div className="w-full flex flex-col items-center space-y-6 sm:space-y-8">
+            {/* Active Drill / Weak Key Header Banner */}
+            {activeLesson && (
+              <div className="w-full max-w-4xl p-3 rounded-md border border-[var(--accent)]/40 bg-[var(--accent-soft)] flex items-center justify-between text-xs font-mono">
+                <div className="flex items-center space-x-2">
+                  <Sparkles className="w-4 h-4 text-[var(--accent)]" />
+                  <span className="font-semibold text-[var(--text)]">
+                    Curriculum Drill: {activeLesson.title}
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    setActiveLesson(null);
+                    engine.resetTest();
+                  }}
+                  className="text-[var(--accent)] hover:underline"
+                >
+                  Exit Drill
+                </button>
+              </div>
+            )}
+
+            {isPracticingWeakKeys && (
+              <div className="w-full max-w-4xl p-3 rounded-md border border-[var(--error)]/40 bg-[var(--error-soft)] flex items-center justify-between text-xs font-mono">
+                <span className="font-semibold text-[var(--error)]">
+                  Focus Mode: Weak Keys Targeted Drill
+                </span>
+                <button
+                  onClick={() => {
+                    setIsPracticingWeakKeys(false);
+                    engine.resetTest();
+                  }}
+                  className="text-[var(--text-muted)] hover:text-[var(--text)] hover:underline"
+                >
+                  Exit Focus Mode
+                </button>
+              </div>
+            )}
+
             {/* Show ResultScreen when finished, otherwise show test canvas */}
             {engine.status === 'finished' && currentResult ? (
               <ResultScreen
@@ -159,23 +290,35 @@ export default function Home() {
                   isRunning={isRunning}
                 />
 
-                {/* Typing Area Canvas */}
-                <TypingArea
-                  words={engine.words}
-                  wordIndex={engine.wordIndex}
-                  currentInput={engine.currentInput}
-                  completedWords={engine.completedWords}
-                  isFocused={engine.isFocused}
-                  onFocusRequest={() => engine.setFocused(true)}
-                />
+                {/* Typing Area Canvas with Font Size & Caret Styling */}
+                <div
+                  className={
+                    settings.fontSize === 'small'
+                      ? '[&_.typing-text]:!text-[24px]'
+                      : settings.fontSize === 'large'
+                      ? '[&_.typing-text]:!text-[32px]'
+                      : ''
+                  }
+                >
+                  <TypingArea
+                    words={engine.words}
+                    wordIndex={engine.wordIndex}
+                    currentInput={engine.currentInput}
+                    completedWords={engine.completedWords}
+                    isFocused={engine.isFocused}
+                    caretStyle={settings.caretStyle}
+                    onFocusRequest={() => engine.setFocused(true)}
+                  />
+                </div>
 
                 {/* Lit-up On-Screen Mechanical Keyboard */}
-                {showKeyboard && (
+                {settings.keyboardVisible && (
                   <VirtualKeyboard
+                    layout={settings.layout}
                     activeKeyCode={engine.activeKeyCode}
                     isKeyError={engine.isKeyError}
                     targetKeyCode={engine.targetKeyCode}
-                    showFingerGuides={false}
+                    showFingerGuides={settings.fingerColorsEnabled}
                   />
                 )}
 
@@ -191,24 +334,36 @@ export default function Home() {
                       <span>Restart</span>
                     </button>
                     <button
-                      onClick={() => setShowKeyboard((prev) => !prev)}
+                      onClick={() =>
+                        handleUpdateSettings({
+                          keyboardVisible: !settings.keyboardVisible,
+                        })
+                      }
                       className="flex items-center space-x-1.5 hover:text-[var(--text)] transition-colors"
                       title="Toggle virtual keyboard"
                     >
                       <KeyboardIcon className="w-3.5 h-3.5" />
-                      <span>{showKeyboard ? 'Hide Keyboard' : 'Show Keyboard'}</span>
+                      <span>
+                        {settings.keyboardVisible ? 'Hide Keyboard' : 'Show Keyboard'}
+                      </span>
                     </button>
                   </div>
 
                   <div className="hidden sm:flex items-center space-x-4">
                     <span className="flex items-center space-x-1">
-                      <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">tab</kbd>
+                      <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">
+                        tab
+                      </kbd>
                       <span>+</span>
-                      <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">enter</kbd>
+                      <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">
+                        enter
+                      </kbd>
                       <span className="ml-1">restart</span>
                     </span>
                     <span className="flex items-center space-x-1">
-                      <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">esc</kbd>
+                      <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">
+                        esc
+                      </kbd>
                       <span className="ml-1">new words</span>
                     </span>
                   </div>
@@ -218,46 +373,29 @@ export default function Home() {
           </div>
         )}
 
+        {/* 2. LEARN TAB */}
         {activeTab === 'learn' && (
-          <div className="w-full max-w-2xl p-8 rounded-lg border border-[var(--border)] bg-[var(--panel)] text-center space-y-4">
-            <h2 className="text-xl font-medium tracking-tight text-[var(--text)]">Beginner Lessons</h2>
-            <p className="text-sm font-mono text-[var(--text-muted)]">
-              Master the home row, top row, bottom row, numbers, and punctuation with real-time finger placement guidance.
-            </p>
-            <div className="pt-4 flex justify-center">
-              <span className="px-3 py-1 rounded border border-[var(--border)] text-xs font-mono text-[var(--accent)]">
-                Unlocks in Stage 4
-              </span>
-            </div>
-          </div>
+          <LearnView onStartLessonPractice={handleStartLessonPractice} />
         )}
 
+        {/* 3. HISTORY TAB */}
         {activeTab === 'history' && (
-          <div className="w-full max-w-2xl p-8 rounded-lg border border-[var(--border)] bg-[var(--panel)] text-center space-y-4">
-            <h2 className="text-xl font-medium tracking-tight text-[var(--text)]">Performance History</h2>
-            <p className="text-sm font-mono text-[var(--text-muted)]">
-              Track personal bests, average WPM, consistency trends, and weak keys over time.
-            </p>
-            <div className="pt-4 flex justify-center">
-              <span className="px-3 py-1 rounded border border-[var(--border)] text-xs font-mono text-[var(--accent)]">
-                Unlocks in Stage 4
-              </span>
-            </div>
-          </div>
+          <HistoryView
+            history={history}
+            stats={stats}
+            onPracticeWeakKeys={handlePracticeWeakKeys}
+            onClearHistory={clearHistory}
+            onStartNewTest={() => setActiveTab('test')}
+          />
         )}
 
+        {/* 4. SETTINGS TAB */}
         {activeTab === 'settings' && (
-          <div className="w-full max-w-2xl p-8 rounded-lg border border-[var(--border)] bg-[var(--panel)] text-center space-y-4">
-            <h2 className="text-xl font-medium tracking-tight text-[var(--text)]">Workspace Settings</h2>
-            <p className="text-sm font-mono text-[var(--text-muted)]">
-              Customize themes, mechanical sound profiles, keyboard layouts, and caret styles.
-            </p>
-            <div className="pt-4 flex justify-center">
-              <span className="px-3 py-1 rounded border border-[var(--border)] text-xs font-mono text-[var(--accent)]">
-                Unlocks in Stage 4
-              </span>
-            </div>
-          </div>
+          <SettingsView
+            settings={settings}
+            onUpdateSettings={handleUpdateSettings}
+            onTestSound={() => playKeySound('standard')}
+          />
         )}
       </main>
 
