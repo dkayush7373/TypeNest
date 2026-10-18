@@ -39,11 +39,13 @@ export function calculateMetrics(
   completedWords: CompletedWord[],
   secondSnapshots: { second: number; wpm: number; rawWpm: number; errors: number }[],
   startTime: number | null,
-  endTime: number | null
+  endTime: number | null,
+  pausedMs: number = 0
 ): CalculatedMetrics {
   const totalKeystrokes = keystrokes.length;
-  const elapsedMs =
+  const rawElapsed =
     startTime && endTime && endTime > startTime ? endTime - startTime : 1000;
+  const elapsedMs = Math.max(rawElapsed - pausedMs, 1000);
   const elapsedSeconds = Math.max(Math.round(elapsedMs / 1000), 1);
   const elapsedMinutes = Math.max(elapsedSeconds / 60, 0.0166);
 
@@ -218,6 +220,7 @@ export function buildTestResult(
     cleanStreak?: number;
     failedChar?: { expected: string; typed: string };
     quoteAuthor?: string;
+    id?: string;
   }
 ): TestResult {
   const targetCount =
@@ -228,7 +231,7 @@ export function buildTestResult(
       : metrics.charStats.correct + metrics.charStats.wrong;
 
   return {
-    id: `test-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    id: extras?.id || `test-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     timestamp: Date.now(),
     mode: config.mode,
     status,

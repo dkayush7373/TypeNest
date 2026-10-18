@@ -30,6 +30,11 @@ export interface TypingEngineState {
   isKeyError: boolean;
   keystrokes: KeystrokeLog[];
   secondSnapshots: { second: number; wpm: number; rawWpm: number; errors: number }[];
+  // Pause duration tracking (BUG-01)
+  totalPausedMs: number;
+  pauseStartTime: number | null;
+  // Stable test run ID (BUG-06)
+  testRunId: string;
   // Sudden Death metrics
   livesRemaining: number;
   cleanStreak: number;
@@ -46,17 +51,19 @@ type Action =
       initialTime: number;
       quoteAuthor?: string;
       initialLives?: number;
+      testRunId?: string;
     }
   | { type: 'APPEND_ZEN_WORDS'; words: string[] }
   | { type: 'KEY_DOWN'; key: string; code: string; timestamp: number }
   | { type: 'TICK'; timestamp: number }
-  | { type: 'SET_FOCUSED'; focused: boolean }
+  | { type: 'SET_FOCUSED'; focused: boolean; timestamp?: number }
   | {
       type: 'RESET_WORDS';
       words: string[];
       initialTime: number;
       quoteAuthor?: string;
       initialLives?: number;
+      testRunId?: string;
     }
   | { type: 'FINISH'; timestamp: number; resultStatus?: ResultStatus }
   | { type: 'CLEAR_ACTIVE_KEY' };
@@ -91,6 +98,9 @@ function engineReducer(
         bestCleanStreak: 0,
         failedChar: undefined,
         quoteAuthor: action.quoteAuthor,
+        totalPausedMs: 0,
+        pauseStartTime: null,
+        testRunId: action.testRunId || `test-${state.elapsedSeconds}-${state.keystrokes.length}`,
       };
     }
 
@@ -110,11 +120,24 @@ function engineReducer(
     }
 
     case 'SET_FOCUSED': {
+      const now = action.timestamp ?? performance.now();
       if (state.status === 'running' && !action.focused) {
-        return { ...state, isFocused: false, status: 'paused' };
+        return {
+          ...state,
+          isFocused: false,
+          status: 'paused',
+          pauseStartTime: now,
+        };
       }
       if (state.status === 'paused' && action.focused) {
-        return { ...state, isFocused: true, status: 'running' };
+        const pauseDuration = state.pauseStartTime ? Math.max(0, now - state.pauseStartTime) : 0;
+        return {
+          ...state,
+          isFocused: true,
+          status: 'running',
+          totalPausedMs: state.totalPausedMs + pauseDuration,
+          pauseStartTime: null,
+        };
       }
       return { ...state, isFocused: action.focused };
     }
@@ -122,7 +145,8 @@ function engineReducer(
     case 'TICK': {
       if (state.status !== 'running' || !state.startTime) return state;
 
-      const elapsed = (action.timestamp - state.startTime) / 1000;
+      const activeElapsedMs = Math.max(0, action.timestamp - state.startTime - state.totalPausedMs);
+      const elapsed = activeElapsedMs / 1000;
       const elapsedSec = Math.floor(elapsed);
 
       // Snapshot calculation for progression charts
@@ -151,6 +175,15 @@ function engineReducer(
         const timeLimit = config.duration || config.time || 30;
         const remaining = Math.max(timeLimit - elapsedSec, 0);
         if (remaining <= 0) {
+          const finalCompleted = [...state.completedWords];
+          const curWord = state.words[state.wordIndex] || '';
+          if (state.currentInput.length > 0 && curWord) {
+            finalCompleted.push({
+              expected: curWord,
+              typed: state.currentInput,
+              correct: state.currentInput === curWord,
+            });
+          }
           return {
             ...state,
             elapsedSeconds: timeLimit,
@@ -158,6 +191,7 @@ function engineReducer(
             status: 'finished',
             resultStatus: 'completed',
             endTime: action.timestamp,
+            completedWords: finalCompleted,
             secondSnapshots: snapshots,
           };
         }
@@ -182,13 +216,20 @@ function engineReducer(
       const { key, code, timestamp } = action;
       let nextStatus = state.status;
       let nextStartTime = state.startTime;
+      let nextTotalPausedMs = state.totalPausedMs;
+      let nextPauseStartTime = state.pauseStartTime;
 
       // Start on first valid keypress (using performance.now)
-      if (state.status === 'idle' || state.status === 'paused') {
+      if (state.status === 'idle') {
         nextStatus = 'running';
         if (!nextStartTime) {
           nextStartTime = timestamp;
         }
+      } else if (state.status === 'paused') {
+        nextStatus = 'running';
+        const pauseDuration = state.pauseStartTime ? Math.max(0, timestamp - state.pauseStartTime) : 0;
+        nextTotalPausedMs = state.totalPausedMs + pauseDuration;
+        nextPauseStartTime = null;
       }
 
       const currentWord = state.words[state.wordIndex] || '';
@@ -218,7 +259,7 @@ function engineReducer(
           expectedChar: ' ',
           typedChar: ' ',
           timestamp,
-          correct: isWordCorrect,
+          correct: true, // Space itself was typed correctly! (BUG-03)
           key,
           code,
         };
@@ -230,8 +271,12 @@ function engineReducer(
           config.mode === 'words' &&
           nextWordIndex >= (config.wordCount || config.words || 25);
         const isQuoteOrCustomFinished =
-          (config.mode === 'quote' || config.mode === 'custom' || config.mode === 'code' || config.mode === 'daily') &&
-          nextWordIndex >= state.words.length;
+          config.mode !== 'zen' &&
+          (config.mode === 'quote' ||
+            config.mode === 'custom' ||
+            config.mode === 'code' ||
+            config.mode === 'daily' ||
+            nextWordIndex >= state.words.length);
 
         if (isWordsFinished || isQuoteOrCustomFinished) {
           return {
@@ -243,7 +288,7 @@ function engineReducer(
             currentInput: '',
             completedWords: newCompleted,
             activeKeyCode: code,
-            isKeyError: !isWordCorrect,
+            isKeyError: false,
             keystrokes: [...state.keystrokes, spaceLog],
           };
         }
@@ -252,11 +297,13 @@ function engineReducer(
           ...state,
           status: nextStatus,
           startTime: nextStartTime,
+          totalPausedMs: nextTotalPausedMs,
+          pauseStartTime: nextPauseStartTime,
           wordIndex: nextWordIndex,
           currentInput: '',
           completedWords: newCompleted,
           activeKeyCode: code,
-          isKeyError: !isWordCorrect,
+          isKeyError: false,
           keystrokes: [...state.keystrokes, spaceLog],
         };
       }
@@ -268,6 +315,8 @@ function engineReducer(
             ...state,
             status: nextStatus,
             startTime: nextStartTime,
+            totalPausedMs: nextTotalPausedMs,
+            pauseStartTime: nextPauseStartTime,
             currentInput: state.currentInput.slice(0, -1),
             activeKeyCode: code,
             isKeyError: false,
@@ -282,6 +331,8 @@ function engineReducer(
             ...state,
             status: nextStatus,
             startTime: nextStartTime,
+            totalPausedMs: nextTotalPausedMs,
+            pauseStartTime: nextPauseStartTime,
             wordIndex: state.wordIndex - 1,
             currentInput: prevWord.typed,
             completedWords: newCompleted,
@@ -347,17 +398,28 @@ function engineReducer(
 
         // Check if finished on the final character of words/quotes/custom/code
         let isFinalCharFinished = false;
-        const isLastWord = state.wordIndex === state.words.length - 1;
+        const isLastWord = state.wordIndex >= state.words.length - 1;
         const isTargetLengthMet =
           config.mode === 'words' &&
           state.wordIndex === (config.wordCount || config.words || 25) - 1;
 
         if (
-          (isTargetLengthMet || (isLastWord && (config.mode === 'quote' || config.mode === 'custom' || config.mode === 'daily' || config.mode === 'code'))) &&
+          (isTargetLengthMet || (isLastWord && config.mode !== 'zen')) &&
           nextInput === currentWord
         ) {
           isFinalCharFinished = true;
         }
+
+        const nextCompletedWords = isFinalCharFinished
+          ? [
+              ...state.completedWords,
+              {
+                expected: currentWord,
+                typed: nextInput,
+                correct: nextInput === currentWord,
+              },
+            ]
+          : state.completedWords;
 
         return {
           ...state,
@@ -365,7 +427,10 @@ function engineReducer(
           resultStatus: 'completed',
           startTime: nextStartTime,
           endTime: isFinalCharFinished ? timestamp : state.endTime,
+          totalPausedMs: nextTotalPausedMs,
+          pauseStartTime: nextPauseStartTime,
           currentInput: nextInput,
+          completedWords: nextCompletedWords,
           activeKeyCode: code,
           isKeyError: config.mode === 'zen' ? false : !isCharCorrect,
           cleanStreak: nextCleanStreak,
@@ -378,11 +443,21 @@ function engineReducer(
     }
 
     case 'FINISH': {
+      const finalCompleted = [...state.completedWords];
+      const curWord = state.words[state.wordIndex] || '';
+      if (state.currentInput.length > 0 && curWord) {
+        finalCompleted.push({
+          expected: curWord,
+          typed: state.currentInput,
+          correct: state.currentInput === curWord,
+        });
+      }
       return {
         ...state,
         status: 'finished',
         resultStatus: action.resultStatus || (config.mode === 'zen' ? 'zen' : 'completed'),
         endTime: action.timestamp,
+        completedWords: finalCompleted,
       };
     }
 
@@ -418,6 +493,9 @@ export function useTypingEngine(
       livesRemaining: config.lives || 1,
       cleanStreak: 0,
       bestCleanStreak: 0,
+      totalPausedMs: 0,
+      pauseStartTime: null,
+      testRunId: 'test-init',
     }
   );
 
@@ -464,6 +542,7 @@ export function useTypingEngine(
         initialTime: config.duration || config.time || 30,
         quoteAuthor: author,
         initialLives: config.lives || (config.mode === 'suddenDeath' ? 1 : 1),
+        testRunId: `test-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       });
     },
     [
@@ -637,10 +716,13 @@ export function useTypingEngine(
   const targetKeyCode = charToEventCode(targetChar);
   const targetNeedsShift = isShiftRequired(targetChar);
 
-  // Live calculation metrics
-  const elapsedMinutes = Math.max(state.elapsedSeconds / 60, 0.001);
+  // Live calculation metrics (BUG-04: Prevent early WPM spike by measuring active elapsed seconds >= 1)
+  const elapsedMinutes = state.elapsedSeconds / 60;
   const correctKeystrokes = state.keystrokes.filter((k) => k.correct).length;
-  const liveNetWpm = state.startTime ? Math.round((correctKeystrokes / 5) / elapsedMinutes) : 0;
+  const liveNetWpm =
+    state.elapsedSeconds >= 1
+      ? Math.round((correctKeystrokes / 5) / elapsedMinutes)
+      : 0;
   const liveAccuracy =
     state.keystrokes.length > 0
       ? Math.round((correctKeystrokes / state.keystrokes.length) * 100)

@@ -121,7 +121,8 @@ export default function Home() {
       engine.completedWords,
       engine.secondSnapshots,
       engine.startTime,
-      engine.endTime
+      engine.endTime,
+      engine.totalPausedMs
     );
 
     return buildTestResult(
@@ -133,6 +134,7 @@ export default function Home() {
         cleanStreak: engine.bestCleanStreak,
         failedChar: engine.failedChar,
         quoteAuthor: engine.quoteAuthor,
+        id: engine.testRunId,
       }
     );
   }, [
@@ -144,6 +146,8 @@ export default function Home() {
     engine.secondSnapshots,
     engine.startTime,
     engine.endTime,
+    engine.totalPausedMs,
+    engine.testRunId,
     engine.bestCleanStreak,
     engine.failedChar,
     engine.quoteAuthor,
@@ -209,7 +213,11 @@ export default function Home() {
     if (currentResult) {
       setPreviousResult(currentResult);
     }
-    engine.resetTest();
+    if (activeLesson) {
+      engine.resetTest(generateLessonDrillWords(activeLesson, 20));
+    } else {
+      engine.resetTest();
+    }
   };
 
   const handleNextTest = () => {
