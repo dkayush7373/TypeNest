@@ -1,7 +1,8 @@
 # KeyFlow (TypeNest)
 
 > **Midnight Studio** — A calm, premium, focused typing speed and learning environment inspired by high-end mechanical keyboard design and Monkeytype.
-
+--------
+here is the live website---" https://keyflow-plum.vercel.app/ "
 ---
 
 ## Tech Stack (Zero Bloat, Strictly Typed)
@@ -85,7 +86,7 @@ npm install
 npm run dev
 ```
 
-Visit [http://localhost:3000](http://localhost:3000) in your browser.
+Visit [ https://keyflow-plum.vercel.app/ ] in your browser.
 
 ### Quality Verification
 
