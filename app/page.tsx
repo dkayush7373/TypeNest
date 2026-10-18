@@ -1,17 +1,22 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { ActiveTab, TestConfig } from '@/types';
 import { BackgroundLayers } from '@/components/BackgroundLayers';
 import { TopBar } from '@/components/TopBar';
-import { Sparkles, RefreshCw, Command, Clock, Type, Hash, AtSign } from 'lucide-react';
+import { StatsBar } from '@/components/StatsBar';
+import { TypingArea } from '@/components/TypingArea';
+import { VirtualKeyboard } from '@/components/VirtualKeyboard';
+import { useTypingEngine } from '@/hooks/useTypingEngine';
+import { useSound } from '@/hooks/useSound';
+import { RefreshCw, Command, RotateCcw, Keyboard as KeyboardIcon } from 'lucide-react';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('test');
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [isTyping] = useState(false);
+  const [showKeyboard, setShowKeyboard] = useState(true);
 
-  // Default test configuration
+  // Test configuration
   const [config, setConfig] = useState<TestConfig>({
     mode: 'time',
     time: 30,
@@ -20,10 +25,37 @@ export default function Home() {
     numbers: false,
   });
 
+  // Sound generator
+  const { playKeySound, getAudioContext } = useSound(soundEnabled, 0.45);
+
+  const handlePlaySound = useCallback(
+    (type: 'standard' | 'space' | 'error') => {
+      playKeySound(type);
+    },
+    [playKeySound]
+  );
+
+  // Typing engine
+  const engine = useTypingEngine(config, handlePlaySound);
+
+  const handleConfigChange = (newConfig: TestConfig) => {
+    setConfig(newConfig);
+  };
+
+  const isRunning = engine.status === 'running';
+
   return (
-    <div className="relative min-h-screen flex flex-col bg-[var(--bg)] text-[var(--text)] selection:bg-[var(--accent)] selection:text-[var(--accent-contrast)]">
+    <div
+      onClick={() => {
+        getAudioContext();
+        if (!engine.isFocused) {
+          engine.setFocused(true);
+        }
+      }}
+      className="relative min-h-screen flex flex-col bg-[var(--bg)] text-[var(--text)] selection:bg-[var(--accent)] selection:text-[var(--accent-contrast)]"
+    >
       {/* Background Layers: Depth, Faint Grid, Noise Grain, Vignette */}
-      <BackgroundLayers isTyping={isTyping} />
+      <BackgroundLayers isTyping={isRunning} />
 
       {/* Top Bar with Brand, Nav, and Theme Switcher */}
       <TopBar
@@ -34,7 +66,7 @@ export default function Home() {
       />
 
       {/* Main Content Workspace */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center max-w-5xl w-full mx-auto px-6 py-8">
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Mobile polite notice */}
         <div className="md:hidden w-full mb-6 p-4 rounded-md border border-[var(--border)] bg-[var(--panel)] text-center text-xs font-mono text-[var(--text-muted)]">
           <p className="text-[var(--text)] font-medium mb-1">Physical Keyboard Recommended</p>
@@ -42,171 +74,107 @@ export default function Home() {
         </div>
 
         {activeTab === 'test' && (
-          <div className="w-full flex flex-col items-center space-y-8">
-            {/* Minimal Mode Configuration Bar */}
-            <div className="flex flex-wrap items-center justify-center gap-4 px-4 py-2 rounded-md border border-[var(--border)] bg-[var(--panel)] text-xs font-mono text-[var(--text-muted)] select-none">
-              {/* Mode: Time vs Words */}
-              <div className="flex items-center space-x-1 border-r border-[var(--border)] pr-3">
-                <button
-                  onClick={() => setConfig({ ...config, mode: 'time' })}
-                  className={`flex items-center space-x-1.5 px-2 py-1 rounded transition-colors ${
-                    config.mode === 'time'
-                      ? 'text-[var(--accent)] bg-[var(--bg)] font-medium'
-                      : 'hover:text-[var(--text)]'
-                  }`}
-                >
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>time</span>
-                </button>
-                <button
-                  onClick={() => setConfig({ ...config, mode: 'words' })}
-                  className={`flex items-center space-x-1.5 px-2 py-1 rounded transition-colors ${
-                    config.mode === 'words'
-                      ? 'text-[var(--accent)] bg-[var(--bg)] font-medium'
-                      : 'hover:text-[var(--text)]'
-                  }`}
-                >
-                  <Type className="w-3.5 h-3.5" />
-                  <span>words</span>
-                </button>
-              </div>
+          <div className="w-full flex flex-col items-center space-y-6 sm:space-y-8">
+            {/* Live Stats & Config Controls */}
+            <StatsBar
+              config={config}
+              onConfigChange={handleConfigChange}
+              wpm={engine.liveNetWpm}
+              accuracy={engine.liveAccuracy}
+              timeRemaining={engine.timeRemaining}
+              wordProgress={{
+                current: Math.min(engine.wordIndex + 1, config.words),
+                total: config.words,
+              }}
+              isRunning={isRunning}
+            />
 
-              {/* Counts */}
-              <div className="flex items-center space-x-2 border-r border-[var(--border)] pr-3">
-                {config.mode === 'time' ? (
-                  ([15, 30, 60, 120] as const).map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setConfig({ ...config, time: t })}
-                      className={`px-1.5 py-0.5 rounded transition-colors ${
-                        config.time === t
-                          ? 'text-[var(--accent)] font-semibold'
-                          : 'hover:text-[var(--text)]'
-                      }`}
-                    >
-                      {t}s
-                    </button>
-                  ))
-                ) : (
-                  ([10, 25, 50, 100] as const).map((w) => (
-                    <button
-                      key={w}
-                      onClick={() => setConfig({ ...config, words: w })}
-                      className={`px-1.5 py-0.5 rounded transition-colors ${
-                        config.words === w
-                          ? 'text-[var(--accent)] font-semibold'
-                          : 'hover:text-[var(--text)]'
-                      }`}
-                    >
-                      {w}
-                    </button>
-                  ))
-                )}
-              </div>
-
-              {/* Toggles: punctuation, numbers */}
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={() => setConfig({ ...config, punctuation: !config.punctuation })}
-                  className={`flex items-center space-x-1 transition-colors ${
-                    config.punctuation ? 'text-[var(--accent)] font-medium' : 'hover:text-[var(--text)]'
-                  }`}
-                >
-                  <AtSign className="w-3.5 h-3.5" />
-                  <span>punctuation</span>
-                </button>
-                <button
-                  onClick={() => setConfig({ ...config, numbers: !config.numbers })}
-                  className={`flex items-center space-x-1 transition-colors ${
-                    config.numbers ? 'text-[var(--accent)] font-medium' : 'hover:text-[var(--text)]'
-                  }`}
-                >
-                  <Hash className="w-3.5 h-3.5" />
-                  <span>numbers</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Live Stats Bar Preview */}
-            <div className="w-full max-w-3xl flex items-baseline justify-between px-4">
-              <div className="flex items-baseline space-x-6">
-                <div>
-                  <span className="block text-[10px] tracking-widest uppercase font-mono text-[var(--text-muted)]">
-                    WPM
+            {/* Test Finished Quick Banner (Stage 2) */}
+            {engine.status === 'finished' ? (
+              <div className="w-full max-w-4xl p-8 rounded-lg border border-[var(--border)] bg-[var(--panel)] text-center space-y-6">
+                <div className="flex flex-col items-center space-y-2">
+                  <span className="text-xs uppercase font-mono tracking-widest text-[var(--text-muted)]">
+                    Test Completed
                   </span>
-                  <span className="text-3xl font-semibold font-mono text-[var(--accent)] num-tabular">
-                    0
-                  </span>
+                  <div className="flex items-baseline space-x-3">
+                    <span className="text-6xl font-bold font-mono text-[var(--accent)] num-tabular">
+                      {engine.liveNetWpm}
+                    </span>
+                    <span className="text-sm font-mono text-[var(--text-muted)]">WPM</span>
+                  </div>
+                  <p className="text-sm font-mono text-[var(--text-muted)]">
+                    Accuracy: <span className="text-[var(--text)] font-semibold">{engine.liveAccuracy}%</span> • Keystrokes: <span className="text-[var(--text)] font-semibold">{engine.keystrokes.length}</span>
+                  </p>
                 </div>
-                <div>
-                  <span className="block text-[10px] tracking-widest uppercase font-mono text-[var(--text-muted)]">
-                    ACCURACY
-                  </span>
-                  <span className="text-3xl font-semibold font-mono text-[var(--text)] num-tabular">
-                    100%
-                  </span>
+
+                <div className="flex justify-center space-x-4">
+                  <button
+                    onClick={() => engine.resetTest()}
+                    className="px-6 py-2.5 rounded-md font-mono text-sm font-medium bg-[var(--accent)] text-[var(--accent-contrast)] hover:opacity-90 active:translate-y-[1px] transition-all flex items-center space-x-2"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Try Again</span>
+                  </button>
                 </div>
               </div>
+            ) : (
+              <>
+                {/* Typing Area Canvas */}
+                <TypingArea
+                  words={engine.words}
+                  wordIndex={engine.wordIndex}
+                  currentInput={engine.currentInput}
+                  completedWords={engine.completedWords}
+                  isFocused={engine.isFocused}
+                  onFocusRequest={() => engine.setFocused(true)}
+                />
 
-              <div>
-                <span className="block text-[10px] tracking-widest uppercase font-mono text-[var(--text-muted)] text-right">
-                  TIME LEFT
-                </span>
-                <span className="text-3xl font-semibold font-mono text-[var(--text)] num-tabular">
-                  {config.time}s
-                </span>
-              </div>
-            </div>
-
-            {/* Stage 1 Typing Area Look & Feel Canvas */}
-            <div className="w-full max-w-3xl p-8 rounded-lg border border-[var(--border)] bg-[var(--panel)] transition-colors">
-              <div className="typing-text relative select-none leading-relaxed text-[var(--text-muted)]">
-                <span className="text-[var(--text)]">the quick </span>
-                <span className="relative text-[var(--accent)] border-b-2 border-[var(--accent)]">
-                  b
-                  <span
-                    className="absolute -right-0.5 top-1 bottom-1 w-[2px] bg-[var(--accent)] caret-anim"
-                    aria-hidden="true"
+                {/* Lit-up On-Screen Mechanical Keyboard */}
+                {showKeyboard && (
+                  <VirtualKeyboard
+                    activeKeyCode={engine.activeKeyCode}
+                    isKeyError={engine.isKeyError}
+                    targetKeyCode={engine.targetKeyCode}
+                    showFingerGuides={false}
                   />
-                </span>
-                <span>rown fox jumps over the lazy dog and tests every mechanical switch with precision and tactile satisfaction</span>
-              </div>
+                )}
 
-              {/* Shortcut Hints */}
-              <div className="mt-8 pt-4 border-t border-[var(--border)] flex items-center justify-between text-xs font-mono text-[var(--text-muted)]">
-                <div className="flex items-center space-x-4">
-                  <span className="flex items-center space-x-1">
-                    <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">tab</kbd>
-                    <span>+</span>
-                    <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">enter</kbd>
-                    <span className="ml-1">restart</span>
-                  </span>
-                  <span className="flex items-center space-x-1">
-                    <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">esc</kbd>
-                    <span className="ml-1">new words</span>
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Sparkles className="w-3.5 h-3.5 text-[var(--accent)]" />
-                  <span>Stage 1 Foundation Ready</span>
-                </div>
-              </div>
-            </div>
+                {/* Bottom Controls & Shortcut Hints */}
+                <div className="w-full max-w-4xl flex items-center justify-between text-xs font-mono text-[var(--text-muted)] pt-2 border-t border-[var(--border)]">
+                  <div className="flex items-center space-x-4">
+                    <button
+                      onClick={() => engine.resetTest()}
+                      className="flex items-center space-x-1.5 hover:text-[var(--text)] transition-colors"
+                      title="Restart test (Tab + Enter)"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Restart</span>
+                    </button>
+                    <button
+                      onClick={() => setShowKeyboard((prev) => !prev)}
+                      className="flex items-center space-x-1.5 hover:text-[var(--text)] transition-colors"
+                      title="Toggle virtual keyboard"
+                    >
+                      <KeyboardIcon className="w-3.5 h-3.5" />
+                      <span>{showKeyboard ? 'Hide Keyboard' : 'Show Keyboard'}</span>
+                    </button>
+                  </div>
 
-            {/* Action Buttons Showcase */}
-            <div className="flex items-center space-x-4">
-              <button
-                className="px-5 py-2 rounded-md font-mono text-sm font-medium bg-[var(--accent)] text-[var(--accent-contrast)] hover:opacity-90 active:translate-y-[1px] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-              >
-                Start Typing Test
-              </button>
-              <button
-                className="px-5 py-2 rounded-md font-mono text-sm font-medium border border-[var(--border)] bg-transparent text-[var(--text)] hover:border-[var(--text-muted)] active:translate-y-[1px] transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] flex items-center space-x-2"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Reset Words</span>
-              </button>
-            </div>
+                  <div className="hidden sm:flex items-center space-x-4">
+                    <span className="flex items-center space-x-1">
+                      <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">tab</kbd>
+                      <span>+</span>
+                      <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">enter</kbd>
+                      <span className="ml-1">restart</span>
+                    </span>
+                    <span className="flex items-center space-x-1">
+                      <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">esc</kbd>
+                      <span className="ml-1">new words</span>
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 
