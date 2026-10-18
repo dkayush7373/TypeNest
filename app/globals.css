@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+:root,
+[data-theme="midnight"] {
+  --bg: #0b1118;
+  --panel: #111a23;
+  --panel-active: #16222e;
+  --border: #1f2a35;
+  --text: #e6edf3;
+  --text-muted: #5d6b7a;
+  --accent: #3dd6c6;
+  --accent-contrast: #07151a;
+  --accent-soft: rgba(61, 214, 198, 0.12);
+  --error: #ff6b6b;
+  --error-soft: rgba(255, 107, 107, 0.12);
+  --radial-light: #12303a;
+  --radial-opacity: 0.35;
+  --grid-line: rgba(255, 255, 255, 0.04);
+  --key-highlight: rgba(255, 255, 255, 0.07);
+  --key-shadow: rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="ember"] {
+  --bg: #120f0d;
+  --panel: #1a1512;
+  --panel-active: #241d19;
+  --border: #2c231e;
+  --text: #f1e9e2;
+  --text-muted: #7a6a5d;
+  --accent: #ffb454;
+  --accent-contrast: #1c1003;
+  --accent-soft: rgba(255, 180, 84, 0.12);
+  --error: #ff6b6b;
+  --error-soft: rgba(255, 107, 107, 0.12);
+  --radial-light: #2e1d13;
+  --radial-opacity: 0.35;
+  --grid-line: rgba(255, 255, 255, 0.04);
+  --key-highlight: rgba(255, 255, 255, 0.08);
+  --key-shadow: rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="paper"] {
+  --bg: #eef1f3;
+  --panel: #ffffff;
+  --panel-active: #f5f7f9;
+  --border: #d5dce2;
+  --text: #1d252c;
+  --text-muted: #7b8794;
+  --accent: #0e8f86;
+  --accent-contrast: #ffffff;
+  --accent-soft: rgba(14, 143, 134, 0.12);
+  --error: #d64545;
+  --error-soft: rgba(214, 69, 69, 0.12);
+  --radial-light: #d6e2e4;
+  --radial-opacity: 0.45;
+  --grid-line: rgba(0, 0, 0, 0.04);
+  --key-highlight: rgba(255, 255, 255, 0.8);
+  --key-shadow: rgba(0, 0, 0, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  min-height: 100%;
+  background-color: var(--bg);
+  color: var(--text);
+  transition: background-color 200ms ease, color 200ms ease;
+  overflow-x: hidden;
+}
+
+.num-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.typing-text {
+  font-family: var(--font-mono), monospace;
+  font-size: clamp(24px, 2.5vw, 32px);
+  line-height: 1.8;
+  letter-spacing: 0.03em;
+}
+
+/* Keycap styling with realistic top highlight and subtle press translation */
+.keycap {
+  border: 1px solid var(--border);
+  background-color: var(--panel);
+  border-radius: 6px;
+  box-shadow: inset 0 1px 0 var(--key-highlight), 0 2px 0 var(--key-shadow);
+  transition: transform 70ms ease, background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+  user-select: none;
+}
+
+.keycap:active,
+.keycap.is-pressed {
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 0 var(--key-highlight), 0 1px 0 var(--key-shadow);
+}
+
+.keycap.is-active-target {
+  border-color: var(--accent);
+  box-shadow: inset 0 1px 0 var(--key-highlight), 0 0 0 1px var(--accent);
+}
+
+.keycap.is-lit {
+  background-color: var(--accent);
+  color: var(--accent-contrast);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-soft), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.keycap.is-error {
+  background-color: var(--error);
+  color: #ffffff;
+  border-color: var(--error);
+  box-shadow: 0 0 12px var(--error-soft);
+}
+
+/* Caret blinking and smooth positioning */
+@keyframes caretBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.caret-anim {
+  animation: caretBlink 1s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
