@@ -1,18 +1,20 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { getKeyboardLayout, KeyboardLayoutType, KeyDefinition } from '@/lib/layouts';
+import { getKeyboardLayout, KeyDefinition, CustomLayout } from '@/lib/layouts';
 
 interface VirtualKeyboardProps {
-  layout?: KeyboardLayoutType;
+  layout?: string;
+  customLayouts?: CustomLayout[];
   activeKeyCode: string | null;
   isKeyError?: boolean;
   targetKeyCode?: string | null;
+  targetNeedsShift?: boolean;
   showFingerGuides?: boolean;
   className?: string;
 }
 
-// Finger color tokens in muted tones (respecting "no rainbow, no neon")
+// Finger color tokens in muted tones (strictly no rainbow, no neon)
 const FINGER_DOT_COLORS: Record<number, string> = {
   1: 'bg-teal-500/40', // left pinky
   2: 'bg-emerald-500/40', // left ring
@@ -28,13 +30,18 @@ const FINGER_DOT_COLORS: Record<number, string> = {
 
 export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
   layout = 'qwerty',
+  customLayouts = [],
   activeKeyCode,
   isKeyError = false,
   targetKeyCode,
+  targetNeedsShift = false,
   showFingerGuides = false,
   className = '',
 }) => {
-  const layoutMatrix = useMemo(() => getKeyboardLayout(layout), [layout]);
+  const layoutMatrix = useMemo(
+    () => getKeyboardLayout(layout, customLayouts),
+    [layout, customLayouts]
+  );
 
   return (
     <div
@@ -49,14 +56,16 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
           >
             {row.map((keyDef: KeyDefinition) => {
               const isPressed = activeKeyCode === keyDef.code;
-              const isTarget = targetKeyCode === keyDef.code;
-              const widthMultiplier = keyDef.width || 1;
+              const isShiftKey = keyDef.code === 'ShiftLeft' || keyDef.code === 'ShiftRight';
+              const isTarget =
+                targetKeyCode === keyDef.code ||
+                (targetNeedsShift && isShiftKey);
 
-              // Calculate width flex/basis style
-              // Standard 1u key has base width of ~40-44px
+              const widthMultiplier = keyDef.width || 1;
               const flexGrow = widthMultiplier;
 
-              let keycapClass = 'keycap relative flex flex-col items-center justify-center h-10 sm:h-12 text-xs sm:text-sm font-mono ';
+              let keycapClass =
+                'keycap relative flex flex-col items-center justify-center h-10 sm:h-12 text-xs sm:text-sm font-mono ';
 
               if (isPressed) {
                 if (isKeyError) {
@@ -74,13 +83,19 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
                   className={keycapClass}
                   style={{
                     flex: `${flexGrow} ${flexGrow} 0px`,
-                    minWidth: `${Math.round(28 * widthMultiplier)}px`,
+                    minWidth: `${Math.round(26 * widthMultiplier)}px`,
                   }}
                   data-code={keyDef.code}
                 >
                   {/* Key shift label (upper corner) */}
                   {keyDef.shiftLabel && (
-                    <span className="absolute top-1 left-1.5 text-[9px] text-[var(--text-muted)] opacity-60 leading-none">
+                    <span
+                      className={`absolute top-1 left-1.5 text-[9px] leading-none transition-colors ${
+                        targetNeedsShift && isTarget
+                          ? 'text-[var(--accent)] font-semibold'
+                          : 'text-[var(--text-muted)] opacity-60'
+                      }`}
+                    >
                       {keyDef.shiftLabel}
                     </span>
                   )}
@@ -91,7 +106,7 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
                       isPressed
                         ? 'text-inherit font-semibold'
                         : isTarget
-                        ? 'text-[var(--accent)]'
+                        ? 'text-[var(--accent)] font-semibold'
                         : 'text-[var(--text)]'
                     }`}
                   >
@@ -99,7 +114,7 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
                   </span>
 
                   {/* Finger position indicator dot */}
-                  {showFingerGuides && keyDef.finger && (
+                  {showFingerGuides && keyDef.finger && !isPressed && !isTarget && (
                     <span
                       className={`absolute bottom-1 w-1 h-1 rounded-full ${
                         FINGER_DOT_COLORS[keyDef.finger] || 'bg-slate-500/30'
@@ -116,3 +131,4 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
     </div>
   );
 };
+

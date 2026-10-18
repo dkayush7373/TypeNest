@@ -1,92 +1,191 @@
 import { describe, it, expect } from 'vitest';
+import { calculateMetrics, buildTestResult } from '../lib/metrics';
+import { TestConfig, KeystrokeLog } from '../types';
+import { CompletedWord } from '../hooks/useTypingEngine';
 
-// Re-implement pure metric calculations for isolated testing
-function calculateNetWpm(correctChars: number, elapsedSeconds: number): number {
-  const elapsedMinutes = Math.max(elapsedSeconds / 60, 0.0166);
-  return Math.max(Math.round((correctChars / 5) / elapsedMinutes), 0);
+function mockKey(
+  char: string,
+  timestamp: number,
+  correct: boolean,
+  expectedChar: string = char
+): KeystrokeLog {
+  return {
+    key: char,
+    code: `Key${char.toUpperCase()}`,
+    typedChar: char,
+    expectedChar,
+    timestamp,
+    correct,
+  };
 }
 
-function calculateRawWpm(totalKeystrokes: number, elapsedSeconds: number): number {
-  const elapsedMinutes = Math.max(elapsedSeconds / 60, 0.0166);
-  return Math.max(Math.round((totalKeystrokes / 5) / elapsedMinutes), 0);
-}
-
-function calculateAccuracy(correctKeystrokes: number, totalKeystrokes: number): number {
-  if (totalKeystrokes === 0) return 100;
-  return Math.round((correctKeystrokes / totalKeystrokes) * 100);
-}
-
-function calculateConsistency(wpms: number[]): number {
-  if (wpms.length <= 1) return 100;
-  const mean = wpms.reduce((a, b) => a + b, 0) / wpms.length;
-  if (mean === 0) return 100;
-  const variance = wpms.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / wpms.length;
-  const stdDev = Math.sqrt(variance);
-  const cv = stdDev / mean;
-  return Math.round(Math.min(Math.max(100 - cv * 100, 0), 100));
-}
-
-function getVerdict(netWpm: number, accuracy: number) {
-  let title = 'Beginner';
-  if (netWpm >= 100) title = 'Pro';
-  else if (netWpm >= 70) title = 'Fast';
-  else if (netWpm >= 45) title = 'Good';
-  else if (netWpm >= 25) title = 'Improving';
-
-  let advice = '';
-  if (accuracy < 90) {
-    advice = 'Slow down and aim for accuracy first.';
-  }
-  return { title, advice };
+function mockWord(expected: string, typed: string): CompletedWord {
+  return {
+    expected,
+    typed,
+    correct: expected === typed,
+  };
 }
 
 describe('Typing Metrics Engine', () => {
-  it('calculates Net WPM correctly', () => {
-    // 300 correct characters in 60 seconds = 60 Net WPM
-    expect(calculateNetWpm(300, 60)).toBe(60);
-    // 150 correct characters in 30 seconds = 60 Net WPM
-    expect(calculateNetWpm(150, 30)).toBe(60);
+  const baseConfig: TestConfig = {
+    mode: 'time',
+    duration: 60,
+    time: 60,
+    words: 25,
+    difficulty: 'standard',
+    punctuation: false,
+    numbers: false,
+  };
+
+  it('calculates Net WPM and Raw WPM accurately', () => {
+    const completedWords: CompletedWord[] = [
+      mockWord('hello', 'hello'),
+      mockWord('world', 'world'),
+    ];
+    const keystrokes: KeystrokeLog[] = [];
+    for (let i = 0; i < 11; i++) {
+      keystrokes.push(mockKey('a', i * 100, true));
+    }
+
+    const metrics = calculateMetrics(
+      baseConfig,
+      keystrokes,
+      completedWords,
+      [],
+      1000,
+      61000 // 60s
+    );
+
+    expect(metrics.rawWpm).toBeGreaterThan(0);
+    expect(metrics.accuracy).toBe(100);
+    expect(metrics.charStats.correct).toBe(11); // 5 + 5 + 1 space
+    expect(metrics.charStats.wrong).toBe(0);
   });
 
-  it('calculates Raw WPM including mistakes', () => {
-    // 350 total keystrokes in 60 seconds = 70 Raw WPM
-    expect(calculateRawWpm(350, 60)).toBe(70);
+  it('calculates consistency only when at least 5 second-snapshots are present', () => {
+    // Fewer than 5 snapshots should yield '-'
+    const fewSnapshots = [
+      { second: 1, wpm: 50, rawWpm: 55, errors: 0 },
+      { second: 2, wpm: 52, rawWpm: 56, errors: 0 },
+      { second: 3, wpm: 48, rawWpm: 50, errors: 0 },
+    ];
+    const metricsFew = calculateMetrics(
+      baseConfig,
+      [mockKey('a', 100, true)],
+      [mockWord('a', 'a')],
+      fewSnapshots,
+      1000,
+      4000
+    );
+    expect(metricsFew.consistencyFormatted).toBe('-');
+
+    // 5 or more snapshots should yield a percentage string
+    const enoughSnapshots = [
+      { second: 1, wpm: 60, rawWpm: 60, errors: 0 },
+      { second: 2, wpm: 60, rawWpm: 60, errors: 0 },
+      { second: 3, wpm: 60, rawWpm: 60, errors: 0 },
+      { second: 4, wpm: 60, rawWpm: 60, errors: 0 },
+      { second: 5, wpm: 60, rawWpm: 60, errors: 0 },
+    ];
+    const metricsEnough = calculateMetrics(
+      baseConfig,
+      [mockKey('a', 100, true)],
+      [mockWord('a', 'a')],
+      enoughSnapshots,
+      1000,
+      6000
+    );
+    expect(metricsEnough.consistencyFormatted).toBe('100%');
+    expect(metricsEnough.consistency).toBe(100);
   });
 
-  it('handles zero keystrokes and accuracy edge cases', () => {
-    expect(calculateAccuracy(0, 0)).toBe(100);
-    expect(calculateAccuracy(95, 100)).toBe(95);
-    expect(calculateAccuracy(48, 50)).toBe(96);
+  it('correctly tracks missed and extra characters', () => {
+    const completedWords: CompletedWord[] = [
+      mockWord('apple', 'appl'),
+      mockWord('house', 'houses'),
+    ];
+    const keystrokes: KeystrokeLog[] = [
+      mockKey('a', 100, true),
+      mockKey('p', 200, true),
+      mockKey('p', 300, true),
+      mockKey('l', 400, true),
+      mockKey('h', 500, true),
+      mockKey('o', 600, true),
+      mockKey('u', 700, true),
+      mockKey('s', 800, true),
+      mockKey('e', 900, true),
+      mockKey('s', 1000, false, ' '),
+    ];
+
+    const metrics = calculateMetrics(
+      baseConfig,
+      keystrokes,
+      completedWords,
+      [],
+      1000,
+      10000
+    );
+
+    expect(metrics.charStats.missed).toBe(1);
+    expect(metrics.charStats.extra).toBe(1);
+    expect(metrics.charStats.correct).toBe(9 + 1); // 4 + 5 + 1 space
   });
 
-  it('computes consistency clamped between 0 and 100', () => {
-    expect(calculateConsistency([60, 60, 60, 60])).toBe(100);
-    const cons = calculateConsistency([50, 70, 60, 65]);
-    expect(cons).toBeGreaterThan(0);
-    expect(cons).toBeLessThanOrEqual(100);
-    expect(calculateConsistency([])).toBe(100);
-    expect(calculateConsistency([75])).toBe(100);
+  it('protects against divide-by-zero on empty keystrokes or zero elapsed time', () => {
+    const metrics = calculateMetrics(baseConfig, [], [], [], null, null);
+    expect(metrics.netWpm).toBe(0);
+    expect(metrics.rawWpm).toBe(0);
+    expect(metrics.accuracy).toBe(100);
+    expect(metrics.consistencyFormatted).toBe('-');
+    expect(Number.isFinite(metrics.netWpm)).toBe(true);
+    expect(Number.isNaN(metrics.netWpm)).toBe(false);
   });
 
-  it('verifies verdict rating brackets and advice', () => {
-    expect(getVerdict(15, 95).title).toBe('Beginner');
-    expect(getVerdict(35, 95).title).toBe('Improving');
-    expect(getVerdict(55, 95).title).toBe('Good');
-    expect(getVerdict(85, 95).title).toBe('Fast');
-    expect(getVerdict(120, 95).title).toBe('Pro');
+  it('assigns correct verdict titles and advice based on speed and accuracy', () => {
+    // Pro tier: >= 100 WPM
+    const proKeystrokes: KeystrokeLog[] = Array.from({ length: 500 }, (_, i) =>
+      mockKey('a', i * 50, true)
+    );
+    const proWords: CompletedWord[] = Array.from({ length: 100 }, () =>
+      mockWord('words', 'words')
+    );
+    const proMetrics = calculateMetrics(
+      baseConfig,
+      proKeystrokes,
+      proWords,
+      [],
+      1000,
+      61000 // 60s -> ~100 wpm
+    );
+    expect(proMetrics.verdict.title).toBe('Pro');
 
-    const lowAcc = getVerdict(60, 85);
-    expect(lowAcc.title).toBe('Good');
-    expect(lowAcc.advice).toContain('Slow down and aim for accuracy first');
+    // Low accuracy advice
+    const inaccurateKeystrokes: KeystrokeLog[] = [
+      mockKey('a', 100, true),
+      mockKey('b', 200, false, 'c'),
+    ];
+    const inaccMetrics = calculateMetrics(
+      baseConfig,
+      inaccurateKeystrokes,
+      [],
+      [],
+      1000,
+      5000
+    );
+    expect(inaccMetrics.accuracy).toBe(50);
+    expect(inaccMetrics.verdict.description).toContain('Slow down and aim for accuracy first.');
   });
 
-  it('protects against divide by zero returning finite numbers', () => {
-    const zeroNet = calculateNetWpm(0, 0);
-    expect(Number.isFinite(zeroNet)).toBe(true);
-    expect(Number.isNaN(zeroNet)).toBe(false);
+  it('builds a complete TestResult object with unique id and timestamp', () => {
+    const metrics = calculateMetrics(baseConfig, [], [], [], 1000, 2000);
+    const result = buildTestResult(baseConfig, metrics, [], 'completed', {
+      cleanStreak: 42,
+    });
 
-    const zeroRaw = calculateRawWpm(0, 0);
-    expect(Number.isFinite(zeroRaw)).toBe(true);
-    expect(Number.isNaN(zeroRaw)).toBe(false);
+    expect(result.id).toMatch(/^test-\d+/);
+    expect(result.cleanStreak).toBe(42);
+    expect(result.status).toBe('completed');
+    expect(result.netWpm).toBe(0);
   });
 });

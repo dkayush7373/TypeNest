@@ -3,13 +3,16 @@
 import React from 'react';
 import { ActiveTab, ThemeMode } from '@/types';
 import { useTheme } from '@/hooks/useTheme';
-import { Volume2, VolumeX, Settings as SettingsIcon } from 'lucide-react';
+import { Volume2, VolumeX, Settings as SettingsIcon, Flame } from 'lucide-react';
+import { StreakMetrics } from '@/lib/streak';
 
 interface TopBarProps {
   activeTab: ActiveTab;
   onTabChange: (tab: ActiveTab) => void;
   soundEnabled?: boolean;
   onToggleSound?: () => void;
+  streakMetrics?: StreakMetrics;
+  showStreakBadge?: boolean;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -17,6 +20,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   onTabChange,
   soundEnabled = true,
   onToggleSound,
+  streakMetrics,
+  showStreakBadge = true,
 }) => {
   const { theme, setTheme } = useTheme();
 
@@ -31,14 +36,22 @@ export const TopBar: React.FC<TopBarProps> = ({
     { id: 'test', label: 'test' },
     { id: 'learn', label: 'learn' },
     { id: 'history', label: 'history' },
+    { id: 'streak', label: 'streak' },
+    { id: 'layouts', label: 'layouts' },
     { id: 'settings', label: 'settings' },
   ];
 
+  const streakCount = streakMetrics?.currentStreak || 0;
+  const streakStatus = streakMetrics?.status || 'none';
+
   return (
     <header className="relative z-10 w-full border-b border-[var(--border)] bg-[var(--bg)]/90 backdrop-none transition-colors duration-200">
-      <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         {/* Brand with custom SVG Keycap Mark */}
-        <div className="flex items-center space-x-3 select-none">
+        <div
+          onClick={() => onTabChange('test')}
+          className="flex items-center space-x-3 select-none cursor-pointer"
+        >
           <div
             className="w-8 h-8 rounded-[6px] border border-[var(--border)] bg-[var(--panel)] flex items-center justify-center shadow-sm"
             style={{
@@ -76,7 +89,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         {/* Minimal Text Navigation with Accent Underline */}
         <nav
-          className="flex items-center space-x-8 text-sm"
+          className="hidden md:flex items-center space-x-6 lg:space-x-8 text-sm"
           aria-label="Main Navigation"
         >
           {navItems.map((item) => {
@@ -103,8 +116,41 @@ export const TopBar: React.FC<TopBarProps> = ({
           })}
         </nav>
 
-        {/* Right Controls: Sound, Quick Settings & Theme Switcher */}
-        <div className="flex items-center space-x-3">
+        {/* Right Controls: Streak Badge, Sound, Quick Settings & Theme Switcher */}
+        <div className="flex items-center space-x-2.5">
+          {/* Top Bar Streak Badge */}
+          {showStreakBadge && (
+            <button
+              onClick={() => onTabChange('streak')}
+              aria-label={`Current practice streak: ${streakCount} days. Click to view streak`}
+              className={`flex items-center space-x-1 px-2.5 py-1 rounded-md border font-mono text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] ${
+                streakStatus === 'active'
+                  ? 'border-[var(--accent)]/50 bg-[var(--accent-soft)] text-[var(--accent)] font-semibold'
+                  : streakStatus === 'at-risk'
+                  ? 'border-amber-500/50 bg-amber-500/10 text-amber-400 font-medium animate-pulse'
+                  : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]'
+              }`}
+              title={
+                streakStatus === 'active'
+                  ? `Streak active: ${streakCount} day${streakCount === 1 ? '' : 's'} (Today's goal completed)`
+                  : streakStatus === 'at-risk'
+                  ? `Streak at risk: ${streakCount} day${streakCount === 1 ? '' : 's'} (Practice today to keep it alive)`
+                  : 'Start your practice streak today'
+              }
+            >
+              <Flame
+                className={`w-3.5 h-3.5 ${
+                  streakStatus === 'active'
+                    ? 'text-[var(--accent)] fill-current'
+                    : streakStatus === 'at-risk'
+                    ? 'text-amber-400 fill-current'
+                    : 'text-[var(--text-muted)]'
+                }`}
+              />
+              <span>{streakCount}d</span>
+            </button>
+          )}
+
           {onToggleSound && (
             <button
               onClick={onToggleSound}
@@ -136,7 +182,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
           {/* Theme Selector */}
           <div
-            className="flex items-center p-0.5 rounded-md border border-[var(--border)] bg-[var(--panel)]"
+            className="hidden sm:flex items-center p-0.5 rounded-md border border-[var(--border)] bg-[var(--panel)]"
             role="radiogroup"
             aria-label="Theme selector"
           >
@@ -148,7 +194,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                   role="radio"
                   aria-checked={isSelected}
                   onClick={() => setTheme(t.id)}
-                  className={`px-2.5 py-1 text-xs font-mono lowercase rounded-[4px] transition-all duration-150 focus-visible:outline-none ${
+                  className={`px-2 py-0.5 text-xs font-mono lowercase rounded-[4px] transition-all duration-150 focus-visible:outline-none ${
                     isSelected
                       ? 'bg-[var(--bg)] text-[var(--accent)] border border-[var(--border)] font-medium'
                       : 'text-[var(--text-muted)] hover:text-[var(--text)]'
@@ -164,3 +210,4 @@ export const TopBar: React.FC<TopBarProps> = ({
     </header>
   );
 };
+

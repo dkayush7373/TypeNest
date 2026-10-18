@@ -1,16 +1,19 @@
 'use client';
 
 import React from 'react';
-import { UserSettings, ThemeMode } from '@/types';
+import { UserSettings, ThemeMode, DailyGoalOption } from '@/types';
 import { useTheme } from '@/hooks/useTheme';
-import { KeyboardLayoutType } from '@/lib/layouts';
 import {
   Palette,
   Type,
   Volume2,
   VolumeX,
   Keyboard as KeyboardIcon,
+  Flame,
 } from 'lucide-react';
+import { CustomLayout } from '@/lib/layouts';
+import { getSafeStorage } from '@/lib/storage';
+import { LAYOUTS_STORAGE_KEY } from '@/components/LayoutBuilder';
 
 interface SettingsViewProps {
   settings: UserSettings;
@@ -24,6 +27,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onTestSound,
 }) => {
   const { theme, setTheme } = useTheme();
+
+  const customLayouts = getSafeStorage<CustomLayout[]>(LAYOUTS_STORAGE_KEY, []);
 
   const themes: { id: ThemeMode; label: string; desc: string }[] = [
     {
@@ -48,10 +53,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     },
   ];
 
-  const layouts: { id: KeyboardLayoutType; label: string; desc: string }[] = [
-    { id: 'qwerty', label: 'QWERTY', desc: 'Standard universal keyboard layout' },
-    { id: 'colemak', label: 'Colemak', desc: 'Ergonomic layout for high typing efficiency' },
-    { id: 'dvorak', label: 'Dvorak', desc: 'Vowels on home row to minimize finger movement' },
+  const presetLayouts = [
+    { id: 'qwerty', label: 'QWERTY', desc: 'Standard universal layout' },
+    { id: 'colemak', label: 'Colemak', desc: 'Ergonomic high-flow typing' },
+    { id: 'dvorak', label: 'Dvorak', desc: 'Vowels centered on home row' },
+    { id: 'workman', label: 'Workman', desc: 'Optimized finger movement balance' },
   ];
 
   const fontSizes: { id: 'small' | 'medium' | 'large'; label: string }[] = [
@@ -64,6 +70,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     { id: 'line', label: 'Smooth Line' },
     { id: 'block', label: 'Solid Block' },
     { id: 'underline', label: 'Underline' },
+  ];
+
+  const soundPacks: { id: 'soft' | 'clicky' | 'thock'; label: string; desc: string }[] = [
+    { id: 'soft', label: 'Linear Soft', desc: 'Subtle damped keystroke acoustics' },
+    { id: 'clicky', label: 'Clicky Blue', desc: 'Crisp mechanical tactile feedback' },
+    { id: 'thock', label: 'Deep Thock', desc: 'Deep resonance plate acoustic signature' },
+  ];
+
+  const dailyGoals: { id: DailyGoalOption; label: string; desc: string }[] = [
+    { id: '1-session', label: '1 Session / day', desc: 'Recommended minimum consistency habit' },
+    { id: '3-sessions', label: '3 Sessions / day', desc: 'Steadily build velocity and speed' },
+    { id: '5-minutes', label: '5 Minutes / day', desc: 'Dedicated daily endurance block' },
   ];
 
   return (
@@ -86,7 +104,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <span>Studio Color Theme</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {themes.map((t) => {
               const selected = theme === t.id;
               return (
@@ -96,7 +114,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     setTheme(t.id);
                     onUpdateSettings({ theme: t.id });
                   }}
-                  className={`p-4 rounded-md border text-left transition-all select-none focus-visible:outline-none ${
+                  className={`p-3.5 rounded-md border text-left transition-all select-none focus-visible:outline-none ${
                     selected
                       ? 'border-[var(--accent)] bg-[var(--bg)] shadow-xs'
                       : 'border-[var(--border)] bg-[var(--panel)] hover:border-[var(--text-muted)]'
@@ -119,7 +137,61 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
 
-        {/* Section 2: Mechanical Audio Feedback */}
+        {/* Section 2: Daily Streak Goal */}
+        <div className="p-6 rounded-lg border border-[var(--border)] bg-[var(--panel)] space-y-4">
+          <div className="flex items-center space-x-2 text-[var(--text)] font-semibold text-sm">
+            <Flame className="w-4 h-4 text-[var(--accent)]" />
+            <span>Daily Practice Goal & Streak Settings</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {dailyGoals.map((g) => {
+              const selected = (settings.dailyGoal || '1-session') === g.id;
+              return (
+                <button
+                  key={g.id}
+                  onClick={() => onUpdateSettings({ dailyGoal: g.id })}
+                  className={`p-3.5 rounded-md border text-left transition-all select-none focus-visible:outline-none ${
+                    selected
+                      ? 'border-[var(--accent)] bg-[var(--bg)] shadow-xs'
+                      : 'border-[var(--border)] bg-[var(--panel)] hover:border-[var(--text-muted)]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-semibold text-xs text-[var(--text)] font-mono">
+                      {g.label}
+                    </span>
+                    {selected && (
+                      <span className="w-2 h-2 rounded-full bg-[var(--accent)]" />
+                    )}
+                  </div>
+                  <p className="text-[11px] font-mono text-[var(--text-muted)]">
+                    {g.desc}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="pt-2 flex items-center space-x-3">
+            <button
+              onClick={() =>
+                onUpdateSettings({
+                  showStreakBadge: settings.showStreakBadge !== false ? false : true,
+                })
+              }
+              className={`px-3 py-1.5 rounded-md border text-xs font-mono transition-colors ${
+                settings.showStreakBadge !== false
+                  ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--bg)]'
+                  : 'border-[var(--border)] text-[var(--text-muted)]'
+              }`}
+            >
+              Top Bar Streak Badge: {settings.showStreakBadge !== false ? 'Shown' : 'Hidden'}
+            </button>
+          </div>
+        </div>
+
+        {/* Section 3: Mechanical Audio Feedback */}
         <div className="p-6 rounded-lg border border-[var(--border)] bg-[var(--panel)] space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 text-[var(--text)] font-semibold text-sm">
@@ -137,12 +209,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               }}
               className={`px-3 py-1 rounded-md border text-xs font-mono font-medium transition-colors ${
                 settings.soundEnabled
-                  ? 'bg-[var(--accent)] text-[var(--accent-contrast)] border-[var(--accent)]'
+                  ? 'bg-[var(--accent)] text-[var(--bg)] border-[var(--accent)]'
                   : 'bg-[var(--bg)] text-[var(--text-muted)] border-[var(--border)]'
               }`}
             >
               {settings.soundEnabled ? 'Enabled' : 'Muted'}
             </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+            {soundPacks.map((pack) => {
+              const selected = (settings.soundPack || 'clicky') === pack.id;
+              return (
+                <button
+                  key={pack.id}
+                  disabled={!settings.soundEnabled}
+                  onClick={() => onUpdateSettings({ soundPack: pack.id })}
+                  className={`p-3 rounded-md border text-left transition-all select-none disabled:opacity-40 ${
+                    selected
+                      ? 'border-[var(--accent)] bg-[var(--bg)]'
+                      : 'border-[var(--border)] bg-[var(--panel)] hover:border-[var(--text-muted)]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-semibold text-xs text-[var(--text)] font-mono">
+                      {pack.label}
+                    </span>
+                    {selected && (
+                      <span className="w-2 h-2 rounded-full bg-[var(--accent)]" />
+                    )}
+                  </div>
+                  <p className="text-[10px] font-mono text-[var(--text-muted)]">
+                    {pack.desc}
+                  </p>
+                </button>
+              );
+            })}
           </div>
 
           <div className="space-y-3 pt-2">
@@ -178,15 +280,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
 
-        {/* Section 3: Keyboard Layout & Geometry */}
+        {/* Section 4: Keyboard Layout & Geometry */}
         <div className="p-6 rounded-lg border border-[var(--border)] bg-[var(--panel)] space-y-4">
           <div className="flex items-center space-x-2 text-[var(--text)] font-semibold text-sm">
             <KeyboardIcon className="w-4 h-4 text-[var(--accent)]" />
             <span>Keyboard Layout & Physical Mapping</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {layouts.map((l) => {
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {presetLayouts.map((l) => {
               const selected = settings.layout === l.id;
               return (
                 <button
@@ -214,38 +316,74 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             })}
           </div>
 
-          <div className="pt-3 border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={() =>
-                  onUpdateSettings({ keyboardVisible: !settings.keyboardVisible })
-                }
-                className={`px-3 py-1.5 rounded-md border text-xs font-mono transition-colors ${
-                  settings.keyboardVisible
-                    ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--bg)]'
-                    : 'border-[var(--border)] text-[var(--text-muted)]'
-                }`}
-              >
-                On-screen Keyboard: {settings.keyboardVisible ? 'Visible' : 'Hidden'}
-              </button>
-
-              <button
-                onClick={() =>
-                  onUpdateSettings({ fingerColorsEnabled: !settings.fingerColorsEnabled })
-                }
-                className={`px-3 py-1.5 rounded-md border text-xs font-mono transition-colors ${
-                  settings.fingerColorsEnabled
-                    ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--bg)]'
-                    : 'border-[var(--border)] text-[var(--text-muted)]'
-                }`}
-              >
-                Finger Placement Dots: {settings.fingerColorsEnabled ? 'On' : 'Off'}
-              </button>
+          {/* Custom layouts list if any */}
+          {customLayouts.length > 0 && (
+            <div className="pt-2 space-y-2">
+              <span className="text-xs font-mono text-[var(--text-muted)] uppercase">Custom Layouts:</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {customLayouts.map((c) => {
+                  const selected = settings.layout === c.id;
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => onUpdateSettings({ layout: c.id })}
+                      className={`p-2.5 rounded border text-left font-mono text-xs ${
+                        selected
+                          ? 'border-[var(--accent)] bg-[var(--bg)] text-[var(--accent)] font-semibold'
+                          : 'border-[var(--border)] hover:border-[var(--text-muted)]'
+                      }`}
+                    >
+                      {c.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+          )}
+
+          <div className="pt-3 border-t border-[var(--border)] flex flex-wrap items-center gap-3">
+            <button
+              onClick={() =>
+                onUpdateSettings({ keyboardVisible: !settings.keyboardVisible })
+              }
+              className={`px-3 py-1.5 rounded-md border text-xs font-mono transition-colors ${
+                settings.keyboardVisible
+                  ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--bg)]'
+                  : 'border-[var(--border)] text-[var(--text-muted)]'
+              }`}
+            >
+              On-screen Keyboard: {settings.keyboardVisible ? 'Visible' : 'Hidden'}
+            </button>
+
+            <button
+              onClick={() =>
+                onUpdateSettings({ fingerColorsEnabled: !settings.fingerColorsEnabled })
+              }
+              className={`px-3 py-1.5 rounded-md border text-xs font-mono transition-colors ${
+                settings.fingerColorsEnabled
+                  ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--bg)]'
+                  : 'border-[var(--border)] text-[var(--text-muted)]'
+              }`}
+            >
+              Finger Placement Dots: {settings.fingerColorsEnabled ? 'On' : 'Off'}
+            </button>
+
+            <button
+              onClick={() =>
+                onUpdateSettings({ reducedMotion: !settings.reducedMotion })
+              }
+              className={`px-3 py-1.5 rounded-md border text-xs font-mono transition-colors ${
+                settings.reducedMotion
+                  ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--bg)]'
+                  : 'border-[var(--border)] text-[var(--text-muted)]'
+              }`}
+            >
+              Reduced Motion: {settings.reducedMotion ? 'Enabled' : 'Disabled'}
+            </button>
           </div>
         </div>
 
-        {/* Section 4: Typography & Caret */}
+        {/* Section 5: Typography & Caret */}
         <div className="p-6 rounded-lg border border-[var(--border)] bg-[var(--panel)] space-y-4">
           <div className="flex items-center space-x-2 text-[var(--text)] font-semibold text-sm">
             <Type className="w-4 h-4 text-[var(--accent)]" />
@@ -302,3 +440,4 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     </div>
   );
 };
+

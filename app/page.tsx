@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { ActiveTab, TestConfig, TestResult, UserSettings } from '@/types';
 import { BackgroundLayers } from '@/components/BackgroundLayers';
 import { TopBar } from '@/components/TopBar';
@@ -10,6 +10,8 @@ import { VirtualKeyboard } from '@/components/VirtualKeyboard';
 import { ResultScreen } from '@/components/ResultScreen';
 import { HistoryView } from '@/components/HistoryView';
 import { LearnView, LESSONS_PROGRESS_KEY, LessonProgress } from '@/components/LearnView';
+import { StreakView } from '@/components/StreakView';
+import { LayoutBuilder, LAYOUTS_STORAGE_KEY } from '@/components/LayoutBuilder';
 import { SettingsView } from '@/components/SettingsView';
 import { useTypingEngine } from '@/hooks/useTypingEngine';
 import { useSound } from '@/hooks/useSound';
@@ -18,7 +20,17 @@ import { calculateMetrics, buildTestResult } from '@/lib/metrics';
 import { getSafeStorage, setSafeStorage } from '@/lib/storage';
 import { Lesson, LESSONS, generateLessonDrillWords } from '@/lib/lessons';
 import { generateWeakKeysWords } from '@/lib/wordLists';
-import { RefreshCw, Command, Keyboard as KeyboardIcon, Sparkles } from 'lucide-react';
+import { CustomLayout } from '@/lib/layouts';
+import {
+  RefreshCw,
+  Command,
+  Keyboard as KeyboardIcon,
+  Sparkles,
+  Flame,
+  X,
+  Play,
+  HelpCircle,
+} from 'lucide-react';
 
 const SETTINGS_STORAGE_KEY = 'keyflow:settings';
 const PB_STORAGE_KEY = 'keyflow:personal_best';
@@ -27,8 +39,10 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('test');
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
   const [isPracticingWeakKeys, setIsPracticingWeakKeys] = useState(false);
+  const [dismissAtRiskBanner, setDismissAtRiskBanner] = useState(false);
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
 
-  // User Settings with instant storage sync
+  // User Settings with instant local storage persistence
   const [settings, setSettings] = useState<UserSettings>(() => {
     return getSafeStorage<UserSettings>(SETTINGS_STORAGE_KEY, {
       theme: 'midnight',
@@ -39,6 +53,10 @@ export default function Home() {
       keyboardVisible: true,
       fingerColorsEnabled: false,
       layout: 'qwerty',
+      dailyGoal: '1-session',
+      showStreakBadge: true,
+      soundPack: 'clicky',
+      reducedMotion: false,
     });
   });
 
@@ -50,9 +68,13 @@ export default function Home() {
     });
   }, []);
 
-  // History system
-  const { history, stats, saveResult, clearHistory } = useHistory();
+  // History & Streak system
+  const { history, dailyLog, streakMetrics, stats, saveResult, recordLessonSession, clearHistory } =
+    useHistory();
   const [previousResult, setPreviousResult] = useState<TestResult | null>(null);
+
+  // Guard against duplicate saves
+  const lastSavedResultIdRef = useRef<string | null>(null);
 
   // Personal Best
   const [personalBest, setPersonalBest] = useState<number | null>(() => {
@@ -62,10 +84,14 @@ export default function Home() {
   // Test configuration
   const [config, setConfig] = useState<TestConfig>({
     mode: 'time',
+    duration: 30,
     time: 30,
+    wordCount: 25,
     words: 25,
+    difficulty: 'standard',
     punctuation: false,
     numbers: false,
+    lives: 1,
   });
 
   // Sound generator
@@ -98,35 +124,58 @@ export default function Home() {
       engine.endTime
     );
 
-    return buildTestResult(config, metrics, engine.secondSnapshots);
+    return buildTestResult(
+      config,
+      metrics,
+      engine.secondSnapshots,
+      engine.resultStatus,
+      {
+        cleanStreak: engine.bestCleanStreak,
+        failedChar: engine.failedChar,
+        quoteAuthor: engine.quoteAuthor,
+      }
+    );
   }, [
     engine.status,
+    engine.resultStatus,
     config,
     engine.keystrokes,
     engine.completedWords,
     engine.secondSnapshots,
     engine.startTime,
     engine.endTime,
+    engine.bestCleanStreak,
+    engine.failedChar,
+    engine.quoteAuthor,
   ]);
 
-  // Handle test completion side-effects: auto-save to history, update PB, update lesson progression
+  // Handle test completion side-effects: auto-save once, update PB, update lesson progression
   useEffect(() => {
     if (engine.status === 'finished' && currentResult) {
-      // 1. Save to History
+      if (lastSavedResultIdRef.current === currentResult.id) {
+        return;
+      }
+      lastSavedResultIdRef.current = currentResult.id;
+
+      // 1. Save to History (updates daily streak log exactly once)
       saveResult(currentResult);
 
-      // 2. Personal Best Sync
-      const storedPb = getSafeStorage<number | null>(PB_STORAGE_KEY, null);
-      if (storedPb === null || currentResult.netWpm > storedPb) {
-        setSafeStorage(PB_STORAGE_KEY, currentResult.netWpm);
-        const timer = setTimeout(() => {
-          setPersonalBest(currentResult.netWpm);
-        }, 0);
-        return () => clearTimeout(timer);
+      // 2. Personal Best Sync (only for completed standard/word speed runs)
+      if (currentResult.status === 'completed') {
+        const storedPb = getSafeStorage<number | null>(PB_STORAGE_KEY, null);
+        if (storedPb === null || currentResult.netWpm > storedPb) {
+          setSafeStorage(PB_STORAGE_KEY, currentResult.netWpm);
+          const timer = setTimeout(() => {
+            setPersonalBest(currentResult.netWpm);
+          }, 0);
+          return () => clearTimeout(timer);
+        }
       }
 
       // 3. Lesson Progression Sync if drill completed
       if (activeLesson) {
+        recordLessonSession(activeLesson.id, currentResult.elapsedSeconds);
+
         const storedProgress = getSafeStorage<LessonProgress>(LESSONS_PROGRESS_KEY, {
           unlockedLessonIds: ['home-row'],
           lessonBestAccuracy: {},
@@ -154,7 +203,7 @@ export default function Home() {
         });
       }
     }
-  }, [engine.status, currentResult, activeLesson, saveResult]);
+  }, [engine.status, currentResult, activeLesson, saveResult, recordLessonSession]);
 
   const handleTryAgain = () => {
     if (currentResult) {
@@ -191,6 +240,30 @@ export default function Home() {
     engine.resetTest(drillWords);
   };
 
+  // Layout testing handler from LayoutBuilder
+  const handleTestLayout = (layoutId: string) => {
+    handleUpdateSettings({ layout: layoutId });
+    setActiveTab('test');
+    engine.resetTest();
+  };
+
+  // Global shortcut listeners for '?' (shortcuts modal) and Ctrl+K
+  useEffect(() => {
+    const handleGlobalShortcuts = (e: KeyboardEvent) => {
+      if (e.key === '?' && !isRunning && (e.target as HTMLElement)?.tagName !== 'INPUT' && (e.target as HTMLElement)?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        setShowShortcutsModal((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalShortcuts);
+    return () => window.removeEventListener('keydown', handleGlobalShortcuts);
+  }, [isRunning]);
+
+  // Read custom layouts for virtual keyboard
+  const customLayouts = useMemo(() => {
+    return getSafeStorage<CustomLayout[]>(LAYOUTS_STORAGE_KEY, []);
+  }, []);
+
   return (
     <div
       onClick={() => {
@@ -204,7 +277,7 @@ export default function Home() {
       {/* Background Layers: Depth, Faint Grid, Noise Grain, Vignette */}
       <BackgroundLayers isTyping={isRunning} />
 
-      {/* Top Bar with Brand, Nav, and Theme Switcher */}
+      {/* Top Bar with Brand, Nav, Streak Badge, and Theme Switcher */}
       <TopBar
         activeTab={activeTab}
         onTabChange={(tab) => {
@@ -217,14 +290,37 @@ export default function Home() {
         onToggleSound={() =>
           handleUpdateSettings({ soundEnabled: !settings.soundEnabled })
         }
+        streakMetrics={streakMetrics}
+        showStreakBadge={settings.showStreakBadge !== false}
       />
+
+      {/* At-Risk Streak Calm In-App Banner */}
+      {streakMetrics.status === 'at-risk' && !dismissAtRiskBanner && (
+        <div className="relative z-20 w-full bg-amber-500/10 border-b border-amber-500/30 px-4 py-2 text-xs font-mono text-amber-300 flex items-center justify-between">
+          <div className="max-w-5xl mx-auto w-full flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Flame className="w-4 h-4 fill-current text-amber-400" />
+              <span>
+                Your {streakMetrics.currentStreak}-day practice streak is alive! Complete today&apos;s goal before midnight to keep it rolling.
+              </span>
+            </div>
+            <button
+              onClick={() => setDismissAtRiskBanner(true)}
+              className="p-1 rounded hover:bg-amber-500/20 text-amber-300/80 hover:text-amber-300 transition-colors"
+              title="Dismiss notice"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Workspace */}
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center max-w-5xl w-full mx-auto px-4 sm:px-6 py-4 sm:py-6">
         {/* Mobile polite notice */}
-        <div className="md:hidden w-full mb-4 p-3 rounded-md border border-[var(--border)] bg-[var(--panel)] text-center text-xs font-mono text-[var(--text-muted)]">
+        <div className="lg:hidden w-full mb-4 p-3 rounded-md border border-[var(--border)] bg-[var(--panel)] text-center text-xs font-mono text-[var(--text-muted)]">
           <p className="text-[var(--text)] font-medium mb-1">Physical Keyboard Recommended</p>
-          <p>KeyFlow is optimized for desktop and tactile mechanical typing experiences.</p>
+          <p>KeyFlow is optimized for desktop and tactile mechanical typing experiences on 1024px+ displays.</p>
         </div>
 
         {/* 1. TEST TAB */}
@@ -252,8 +348,8 @@ export default function Home() {
             )}
 
             {isPracticingWeakKeys && (
-              <div className="w-full max-w-4xl p-3 rounded-md border border-[var(--error)]/40 bg-[var(--error-soft)] flex items-center justify-between text-xs font-mono">
-                <span className="font-semibold text-[var(--error)]">
+              <div className="w-full max-w-4xl p-3 rounded-md border border-rose-500/40 bg-rose-500/10 flex items-center justify-between text-xs font-mono">
+                <span className="font-semibold text-rose-400">
                   Focus Mode: Weak Keys Targeted Drill
                 </span>
                 <button
@@ -274,35 +370,57 @@ export default function Home() {
                 result={currentResult}
                 previousResult={previousResult}
                 personalBest={personalBest}
+                streakMetrics={streakMetrics}
                 onTryAgain={handleTryAgain}
                 onNextTest={handleNextTest}
               />
             ) : (
               <>
-                {/* Live Stats & Config Controls */}
+                {/* Live Stats & 2-Row Config Controls */}
                 <StatsBar
                   config={config}
                   onConfigChange={(newCfg) => setConfig(newCfg)}
                   wpm={engine.liveNetWpm}
                   accuracy={engine.liveAccuracy}
                   timeRemaining={engine.timeRemaining}
+                  elapsedSeconds={engine.elapsedSeconds}
                   wordProgress={{
-                    current: Math.min(engine.wordIndex + 1, config.words),
-                    total: config.words,
+                    current: Math.min(engine.wordIndex + 1, config.words || 25),
+                    total: config.wordCount || config.words || 25,
                   }}
                   isRunning={isRunning}
+                  livesRemaining={engine.livesRemaining}
+                  cleanStreak={engine.cleanStreak}
+                  streakMetrics={streakMetrics}
+                  onFinishZen={() => engine.finishTest('zen')}
                 />
 
                 {/* Typing Area Canvas with Font Size & Caret Styling */}
                 <div
-                  className={
+                  className={`relative w-full ${
                     settings.fontSize === 'small'
                       ? '[&_.typing-text]:!text-[24px]'
                       : settings.fontSize === 'large'
                       ? '[&_.typing-text]:!text-[32px]'
                       : ''
-                  }
+                  }`}
                 >
+                  {/* Window Blur Pause Overlay */}
+                  {!engine.isFocused && engine.status === 'paused' && (
+                    <div
+                      onClick={() => engine.setFocused(true)}
+                      className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[var(--bg)]/85 backdrop-blur-[2px] rounded-lg cursor-pointer select-none font-mono text-center p-4"
+                    >
+                      <Play className="w-8 h-8 text-[var(--accent)] mb-2 animate-pulse" />
+                      <span className="text-base font-semibold text-[var(--text)]">
+                        Test Paused
+                      </span>
+                      <span className="text-xs text-[var(--text-muted)] mt-1">
+                        Click anywhere or press any key to resume
+                      </span>
+                    </div>
+                  )}
+
                   <TypingArea
                     words={engine.words}
                     wordIndex={engine.wordIndex}
@@ -318,9 +436,11 @@ export default function Home() {
                 {settings.keyboardVisible && (
                   <VirtualKeyboard
                     layout={settings.layout}
+                    customLayouts={customLayouts}
                     activeKeyCode={engine.activeKeyCode}
                     isKeyError={engine.isKeyError}
                     targetKeyCode={engine.targetKeyCode}
+                    targetNeedsShift={engine.targetNeedsShift}
                     showFingerGuides={settings.fingerColorsEnabled}
                   />
                 )}
@@ -352,23 +472,33 @@ export default function Home() {
                     </button>
                   </div>
 
-                  <div className="hidden sm:flex items-center space-x-4">
-                    <span className="flex items-center space-x-1">
-                      <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">
-                        tab
-                      </kbd>
-                      <span>+</span>
-                      <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">
-                        enter
-                      </kbd>
-                      <span className="ml-1">restart</span>
-                    </span>
-                    <span className="flex items-center space-x-1">
-                      <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">
-                        esc
-                      </kbd>
-                      <span className="ml-1">new words</span>
-                    </span>
+                  <div className="flex items-center space-x-4">
+                    <div className="hidden sm:flex items-center space-x-4">
+                      <span className="flex items-center space-x-1">
+                        <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">
+                          tab
+                        </kbd>
+                        <span>+</span>
+                        <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">
+                          enter
+                        </kbd>
+                        <span className="ml-1">restart</span>
+                      </span>
+                      <span className="flex items-center space-x-1">
+                        <kbd className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[10px]">
+                          esc
+                        </kbd>
+                        <span className="ml-1">new words</span>
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => setShowShortcutsModal(true)}
+                      className="p-1 rounded hover:text-[var(--text)] text-[var(--text-muted)] transition-colors"
+                      title="Keyboard shortcuts (?)"
+                    >
+                      <HelpCircle className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               </>
@@ -392,7 +522,26 @@ export default function Home() {
           />
         )}
 
-        {/* 4. SETTINGS TAB */}
+        {/* 4. STREAK TAB */}
+        {activeTab === 'streak' && (
+          <StreakView
+            dailyLog={dailyLog}
+            streakMetrics={streakMetrics}
+            dailyGoal={settings.dailyGoal}
+            onStartPractice={() => setActiveTab('test')}
+          />
+        )}
+
+        {/* 5. LAYOUTS TAB */}
+        {activeTab === 'layouts' && (
+          <LayoutBuilder
+            activeLayoutId={settings.layout}
+            onTestLayout={handleTestLayout}
+            onApplyLayoutToSettings={(layoutId) => handleUpdateSettings({ layout: layoutId })}
+          />
+        )}
+
+        {/* 6. SETTINGS TAB */}
         {activeTab === 'settings' && (
           <SettingsView
             settings={settings}
@@ -401,6 +550,53 @@ export default function Home() {
           />
         )}
       </main>
+
+      {/* Shortcuts Modal */}
+      {showShortcutsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm select-none">
+          <div className="w-full max-w-md p-6 rounded-md border border-[var(--border)] bg-[var(--panel)] font-mono space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
+              <h3 className="text-sm font-semibold text-[var(--text)]">Keyboard Shortcuts</h3>
+              <button
+                onClick={() => setShowShortcutsModal(false)}
+                className="p-1 rounded hover:text-[var(--text)] text-[var(--text-muted)]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between py-1 border-b border-[var(--border)]/40">
+                <span className="text-[var(--text-muted)]">Restart test</span>
+                <span className="flex items-center space-x-1">
+                  <kbd className="px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)]">Tab</kbd>
+                  <span>+</span>
+                  <kbd className="px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)]">Enter</kbd>
+                </span>
+              </div>
+              <div className="flex items-center justify-between py-1 border-b border-[var(--border)]/40">
+                <span className="text-[var(--text-muted)]">New words / Exit Zen</span>
+                <kbd className="px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)]">Esc</kbd>
+              </div>
+              <div className="flex items-center justify-between py-1 border-b border-[var(--border)]/40">
+                <span className="text-[var(--text-muted)]">Previous word</span>
+                <span className="text-[11px] text-[var(--text)]">Backspace at word start</span>
+              </div>
+              <div className="flex items-center justify-between py-1">
+                <span className="text-[var(--text-muted)]">Toggle shortcuts</span>
+                <kbd className="px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)]">?</kbd>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowShortcutsModal(false)}
+              className="w-full mt-2 py-2 rounded bg-[var(--bg)] border border-[var(--border)] text-xs text-[var(--text)] hover:border-[var(--accent)] transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="relative z-10 w-full border-t border-[var(--border)] py-4 text-center text-xs font-mono text-[var(--text-muted)]">
@@ -419,3 +615,4 @@ export default function Home() {
     </div>
   );
 }
+

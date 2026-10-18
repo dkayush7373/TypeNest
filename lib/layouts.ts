@@ -6,7 +6,14 @@ export interface KeyDefinition {
   finger?: number; // 1-4 left hand (pinky to index), 5-6 thumbs, 7-10 right hand (index to pinky)
 }
 
-export type KeyboardLayoutType = 'qwerty' | 'colemak' | 'dvorak';
+export type PresetLayoutType = 'qwerty' | 'colemak' | 'dvorak' | 'workman';
+
+export interface CustomLayout {
+  id: string;
+  name: string;
+  presetBase?: PresetLayoutType;
+  rows: KeyDefinition[][];
+}
 
 export const QWERTY_LAYOUT: KeyDefinition[][] = [
   // Number row
@@ -186,15 +193,81 @@ export const DVORAK_LAYOUT: KeyDefinition[][] = [
   QWERTY_LAYOUT[4],
 ];
 
+export const WORKMAN_LAYOUT: KeyDefinition[][] = [
+  QWERTY_LAYOUT[0],
+  [
+    { code: 'Tab', label: 'tab', width: 1.5, finger: 1 },
+    { code: 'KeyQ', label: 'q', shiftLabel: 'Q', finger: 1 },
+    { code: 'KeyD', label: 'd', shiftLabel: 'D', finger: 2 },
+    { code: 'KeyR', label: 'r', shiftLabel: 'R', finger: 3 },
+    { code: 'KeyW', label: 'w', shiftLabel: 'W', finger: 4 },
+    { code: 'KeyB', label: 'b', shiftLabel: 'B', finger: 4 },
+    { code: 'KeyJ', label: 'j', shiftLabel: 'J', finger: 7 },
+    { code: 'KeyF', label: 'f', shiftLabel: 'F', finger: 7 },
+    { code: 'KeyU', label: 'u', shiftLabel: 'U', finger: 8 },
+    { code: 'KeyP', label: 'p', shiftLabel: 'P', finger: 9 },
+    { code: 'Semicolon', label: ';', shiftLabel: ':', finger: 10 },
+    { code: 'BracketLeft', label: '[', shiftLabel: '{', finger: 10 },
+    { code: 'BracketRight', label: ']', shiftLabel: '}', finger: 10 },
+    { code: 'Backslash', label: '\\', shiftLabel: '|', width: 1.5, finger: 10 },
+  ],
+  [
+    { code: 'CapsLock', label: 'caps', width: 1.75, finger: 1 },
+    { code: 'KeyA', label: 'a', shiftLabel: 'A', finger: 1 },
+    { code: 'KeyS', label: 's', shiftLabel: 'S', finger: 2 },
+    { code: 'KeyH', label: 'h', shiftLabel: 'H', finger: 3 },
+    { code: 'KeyT', label: 't', shiftLabel: 'T', finger: 4 },
+    { code: 'KeyG', label: 'g', shiftLabel: 'G', finger: 4 },
+    { code: 'KeyY', label: 'y', shiftLabel: 'Y', finger: 7 },
+    { code: 'KeyN', label: 'n', shiftLabel: 'N', finger: 7 },
+    { code: 'KeyE', label: 'e', shiftLabel: 'E', finger: 8 },
+    { code: 'KeyO', label: 'o', shiftLabel: 'O', finger: 9 },
+    { code: 'KeyI', label: 'i', shiftLabel: 'I', finger: 10 },
+    { code: 'Quote', label: "'", shiftLabel: '"', finger: 10 },
+    { code: 'Enter', label: 'enter', width: 2.25, finger: 10 },
+  ],
+  [
+    { code: 'ShiftLeft', label: 'shift', width: 2.25, finger: 1 },
+    { code: 'KeyZ', label: 'z', shiftLabel: 'Z', finger: 1 },
+    { code: 'KeyX', label: 'x', shiftLabel: 'X', finger: 2 },
+    { code: 'KeyM', label: 'm', shiftLabel: 'M', finger: 3 },
+    { code: 'KeyC', label: 'c', shiftLabel: 'C', finger: 4 },
+    { code: 'KeyV', label: 'v', shiftLabel: 'V', finger: 4 },
+    { code: 'KeyK', label: 'k', shiftLabel: 'K', finger: 7 },
+    { code: 'KeyL', label: 'l', shiftLabel: 'L', finger: 7 },
+    { code: 'Comma', label: ',', shiftLabel: '<', finger: 8 },
+    { code: 'Period', label: '.', shiftLabel: '>', finger: 9 },
+    { code: 'Slash', label: '/', shiftLabel: '?', finger: 10 },
+    { code: 'ShiftRight', label: 'shift', width: 2.75, finger: 10 },
+  ],
+  QWERTY_LAYOUT[4],
+];
+
+export const PRESET_LAYOUTS: Record<PresetLayoutType, { name: string; rows: KeyDefinition[][] }> = {
+  qwerty: { name: 'QWERTY', rows: QWERTY_LAYOUT },
+  colemak: { name: 'Colemak', rows: COLEMAK_LAYOUT },
+  dvorak: { name: 'Dvorak', rows: DVORAK_LAYOUT },
+  workman: { name: 'Workman', rows: WORKMAN_LAYOUT },
+};
+
 /**
- * Returns the keyboard layout matrix according to the selected layout type.
+ * Returns the keyboard layout matrix according to preset or custom layout id.
  */
-export function getKeyboardLayout(layout: KeyboardLayoutType = 'qwerty'): KeyDefinition[][] {
-  switch (layout) {
+export function getKeyboardLayout(
+  layout: string = 'qwerty',
+  customLayouts: CustomLayout[] = []
+): KeyDefinition[][] {
+  const custom = customLayouts.find((c) => c.id === layout);
+  if (custom && custom.rows) {
+    return custom.rows;
+  }
+  switch (layout.toLowerCase()) {
     case 'colemak':
       return COLEMAK_LAYOUT;
     case 'dvorak':
       return DVORAK_LAYOUT;
+    case 'workman':
+      return WORKMAN_LAYOUT;
     case 'qwerty':
     default:
       return QWERTY_LAYOUT;
@@ -202,12 +275,24 @@ export function getKeyboardLayout(layout: KeyboardLayoutType = 'qwerty'): KeyDef
 }
 
 /**
- * Map character to physical event.code for lighting targets.
+ * Map character to physical event.code for lighting targets on a given layout.
  */
-export function charToEventCode(char: string): string | null {
+export function charToEventCode(
+  char: string,
+  layoutRows: KeyDefinition[][] = QWERTY_LAYOUT
+): string | null {
   if (!char) return null;
   if (char === ' ') return 'Space';
 
+  for (const row of layoutRows) {
+    for (const key of row) {
+      if (key.label === char || key.shiftLabel === char) {
+        return key.code;
+      }
+    }
+  }
+
+  // Fallback to QWERTY standard mappings
   const lower = char.toLowerCase();
   if (lower >= 'a' && lower <= 'z') {
     return `Key${lower.toUpperCase()}`;
@@ -234,3 +319,42 @@ export function charToEventCode(char: string): string | null {
 
   return symbolMap[char] || null;
 }
+
+/**
+ * Checks whether typing a given character requires holding Shift.
+ */
+export function isShiftRequired(
+  char: string,
+  layoutRows: KeyDefinition[][] = QWERTY_LAYOUT
+): boolean {
+  if (!char || char === ' ') return false;
+  for (const row of layoutRows) {
+    for (const key of row) {
+      if (key.shiftLabel === char) {
+        return true;
+      }
+    }
+  }
+  return char >= 'A' && char <= 'Z';
+}
+
+/**
+ * Maps a physical event.code to the character generated under a specific layout.
+ * Used for "Test this layout" mode.
+ */
+export function codeToLayoutChar(
+  code: string,
+  shift: boolean,
+  layoutRows: KeyDefinition[][] = QWERTY_LAYOUT
+): string | null {
+  if (code === 'Space') return ' ';
+  for (const row of layoutRows) {
+    for (const key of row) {
+      if (key.code === code) {
+        return shift && key.shiftLabel ? key.shiftLabel : key.label;
+      }
+    }
+  }
+  return null;
+}
+

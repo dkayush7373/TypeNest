@@ -1,9 +1,12 @@
 'use client';
 
 import { useReducer, useEffect, useRef, useCallback } from 'react';
-import { TestConfig, KeystrokeLog } from '@/types';
+import { TestConfig, KeystrokeLog, ResultStatus } from '@/types';
 import { generateWords } from '@/lib/wordLists';
-import { charToEventCode } from '@/lib/layouts';
+import { getRandomQuote } from '@/lib/quotes';
+import { getRandomCodeSnippet } from '@/lib/codeSnippets';
+import { getDailyChallengeWords } from '@/lib/daily';
+import { charToEventCode, isShiftRequired } from '@/lib/layouts';
 
 export interface CompletedWord {
   expected: string;
@@ -17,6 +20,7 @@ export interface TypingEngineState {
   currentInput: string;
   completedWords: CompletedWord[];
   status: 'idle' | 'running' | 'paused' | 'finished';
+  resultStatus: ResultStatus;
   startTime: number | null;
   endTime: number | null;
   elapsedSeconds: number;
@@ -26,20 +30,46 @@ export interface TypingEngineState {
   isKeyError: boolean;
   keystrokes: KeystrokeLog[];
   secondSnapshots: { second: number; wpm: number; rawWpm: number; errors: number }[];
+  // Sudden Death metrics
+  livesRemaining: number;
+  cleanStreak: number;
+  bestCleanStreak: number;
+  failedChar?: { expected: string; typed: string };
+  // Quote attribution
+  quoteAuthor?: string;
 }
 
 type Action =
-  | { type: 'SET_WORDS'; words: string[]; initialTime: number }
+  | {
+      type: 'SET_WORDS';
+      words: string[];
+      initialTime: number;
+      quoteAuthor?: string;
+      initialLives?: number;
+    }
+  | { type: 'APPEND_ZEN_WORDS'; words: string[] }
   | { type: 'KEY_DOWN'; key: string; code: string; timestamp: number }
   | { type: 'TICK'; timestamp: number }
   | { type: 'SET_FOCUSED'; focused: boolean }
-  | { type: 'RESET_WORDS'; words: string[]; initialTime: number }
-  | { type: 'FINISH'; timestamp: number }
+  | {
+      type: 'RESET_WORDS';
+      words: string[];
+      initialTime: number;
+      quoteAuthor?: string;
+      initialLives?: number;
+    }
+  | { type: 'FINISH'; timestamp: number; resultStatus?: ResultStatus }
   | { type: 'CLEAR_ACTIVE_KEY' };
 
-function engineReducer(state: TypingEngineState, action: Action, config: TestConfig): TypingEngineState {
+function engineReducer(
+  state: TypingEngineState,
+  action: Action,
+  config: TestConfig
+): TypingEngineState {
   switch (action.type) {
-    case 'SET_WORDS': {
+    case 'SET_WORDS':
+    case 'RESET_WORDS': {
+      const lives = config.lives || (config.mode === 'suddenDeath' ? 1 : 1);
       return {
         ...state,
         words: action.words,
@@ -47,6 +77,7 @@ function engineReducer(state: TypingEngineState, action: Action, config: TestCon
         currentInput: '',
         completedWords: [],
         status: 'idle',
+        resultStatus: 'completed',
         startTime: null,
         endTime: null,
         elapsedSeconds: 0,
@@ -55,6 +86,18 @@ function engineReducer(state: TypingEngineState, action: Action, config: TestCon
         isKeyError: false,
         keystrokes: [],
         secondSnapshots: [],
+        livesRemaining: action.initialLives ?? lives,
+        cleanStreak: 0,
+        bestCleanStreak: 0,
+        failedChar: undefined,
+        quoteAuthor: action.quoteAuthor,
+      };
+    }
+
+    case 'APPEND_ZEN_WORDS': {
+      return {
+        ...state,
+        words: [...state.words, ...action.words],
       };
     }
 
@@ -82,7 +125,7 @@ function engineReducer(state: TypingEngineState, action: Action, config: TestCon
       const elapsed = (action.timestamp - state.startTime) / 1000;
       const elapsedSec = Math.floor(elapsed);
 
-      // Snapshot calculation for chart
+      // Snapshot calculation for progression charts
       const totalChars = state.keystrokes.length;
       const correctChars = state.keystrokes.filter((k) => k.correct).length;
       const errors = totalChars - correctChars;
@@ -103,14 +146,17 @@ function engineReducer(state: TypingEngineState, action: Action, config: TestCon
         ];
       }
 
+      // Time mode expiration
       if (config.mode === 'time') {
-        const remaining = Math.max(config.time - elapsedSec, 0);
+        const timeLimit = config.duration || config.time || 30;
+        const remaining = Math.max(timeLimit - elapsedSec, 0);
         if (remaining <= 0) {
           return {
             ...state,
-            elapsedSeconds: config.time,
+            elapsedSeconds: timeLimit,
             timeRemaining: 0,
             status: 'finished',
+            resultStatus: 'completed',
             endTime: action.timestamp,
             secondSnapshots: snapshots,
           };
@@ -137,7 +183,7 @@ function engineReducer(state: TypingEngineState, action: Action, config: TestCon
       let nextStatus = state.status;
       let nextStartTime = state.startTime;
 
-      // Start on first keypress
+      // Start on first valid keypress (using performance.now)
       if (state.status === 'idle' || state.status === 'paused') {
         nextStatus = 'running';
         if (!nextStartTime) {
@@ -147,10 +193,10 @@ function engineReducer(state: TypingEngineState, action: Action, config: TestCon
 
       const currentWord = state.words[state.wordIndex] || '';
 
-      // Space: advance word
+      // Space advances to next word
       if (key === ' ') {
         if (state.currentInput.length === 0) {
-          // Ignore leading spaces
+          // Ignore leading empty spaces on a fresh word
           return {
             ...state,
             activeKeyCode: code,
@@ -159,7 +205,7 @@ function engineReducer(state: TypingEngineState, action: Action, config: TestCon
         }
 
         const isWordCorrect = state.currentInput === currentWord;
-        const newCompleted = [
+        const newCompleted: CompletedWord[] = [
           ...state.completedWords,
           {
             expected: currentWord,
@@ -168,7 +214,6 @@ function engineReducer(state: TypingEngineState, action: Action, config: TestCon
           },
         ];
 
-        // Keystroke log for space
         const spaceLog: KeystrokeLog = {
           expectedChar: ' ',
           typedChar: ' ',
@@ -180,11 +225,19 @@ function engineReducer(state: TypingEngineState, action: Action, config: TestCon
 
         const nextWordIndex = state.wordIndex + 1;
 
-        // Check if words mode is completed
-        if (config.mode === 'words' && nextWordIndex >= config.words) {
+        // Check if finished by words mode limit or text completion
+        const isWordsFinished =
+          config.mode === 'words' &&
+          nextWordIndex >= (config.wordCount || config.words || 25);
+        const isQuoteOrCustomFinished =
+          (config.mode === 'quote' || config.mode === 'custom' || config.mode === 'code' || config.mode === 'daily') &&
+          nextWordIndex >= state.words.length;
+
+        if (isWordsFinished || isQuoteOrCustomFinished) {
           return {
             ...state,
             status: 'finished',
+            resultStatus: 'completed',
             endTime: timestamp,
             wordIndex: nextWordIndex,
             currentInput: '',
@@ -208,7 +261,7 @@ function engineReducer(state: TypingEngineState, action: Action, config: TestCon
         };
       }
 
-      // Backspace: delete character within the current word only
+      // Backspace: within current word AND can return to the previous word
       if (key === 'Backspace') {
         if (state.currentInput.length > 0) {
           return {
@@ -220,6 +273,23 @@ function engineReducer(state: TypingEngineState, action: Action, config: TestCon
             isKeyError: false,
           };
         }
+
+        // Return to previous word if at beginning of word
+        if (state.wordIndex > 0 && state.completedWords.length > 0) {
+          const prevWord = state.completedWords[state.completedWords.length - 1];
+          const newCompleted = state.completedWords.slice(0, -1);
+          return {
+            ...state,
+            status: nextStatus,
+            startTime: nextStartTime,
+            wordIndex: state.wordIndex - 1,
+            currentInput: prevWord.typed,
+            completedWords: newCompleted,
+            activeKeyCode: code,
+            isKeyError: false,
+          };
+        }
+
         return {
           ...state,
           activeKeyCode: code,
@@ -242,26 +312,64 @@ function engineReducer(state: TypingEngineState, action: Action, config: TestCon
           code,
         };
 
+        // Sudden Death logic
+        if (config.mode === 'suddenDeath' && !isCharCorrect) {
+          const remainingLives = state.livesRemaining - 1;
+          if (remainingLives <= 0) {
+            // Sudden Death Failure
+            return {
+              ...state,
+              status: 'finished',
+              resultStatus: 'failed',
+              endTime: timestamp,
+              activeKeyCode: code,
+              isKeyError: true,
+              livesRemaining: 0,
+              failedChar: { expected: expectedChar || ' ', typed: key },
+              keystrokes: [...state.keystrokes, newKeystroke],
+            };
+          } else {
+            // Deduct life
+            return {
+              ...state,
+              livesRemaining: remainingLives,
+              activeKeyCode: code,
+              isKeyError: true,
+              cleanStreak: 0,
+              keystrokes: [...state.keystrokes, newKeystroke],
+            };
+          }
+        }
+
+        const nextCleanStreak = isCharCorrect ? state.cleanStreak + 1 : 0;
+        const nextBestClean = Math.max(state.bestCleanStreak, nextCleanStreak);
         const nextInput = state.currentInput + key;
 
-        // In words mode, check if last word completed on last character
-        let finished = false;
-        if (
+        // Check if finished on the final character of words/quotes/custom/code
+        let isFinalCharFinished = false;
+        const isLastWord = state.wordIndex === state.words.length - 1;
+        const isTargetLengthMet =
           config.mode === 'words' &&
-          state.wordIndex === config.words - 1 &&
+          state.wordIndex === (config.wordCount || config.words || 25) - 1;
+
+        if (
+          (isTargetLengthMet || (isLastWord && (config.mode === 'quote' || config.mode === 'custom' || config.mode === 'daily' || config.mode === 'code'))) &&
           nextInput === currentWord
         ) {
-          finished = true;
+          isFinalCharFinished = true;
         }
 
         return {
           ...state,
-          status: finished ? 'finished' : nextStatus,
+          status: isFinalCharFinished ? 'finished' : nextStatus,
+          resultStatus: 'completed',
           startTime: nextStartTime,
-          endTime: finished ? timestamp : state.endTime,
+          endTime: isFinalCharFinished ? timestamp : state.endTime,
           currentInput: nextInput,
           activeKeyCode: code,
-          isKeyError: !isCharCorrect,
+          isKeyError: config.mode === 'zen' ? false : !isCharCorrect,
+          cleanStreak: nextCleanStreak,
+          bestCleanStreak: nextBestClean,
           keystrokes: [...state.keystrokes, newKeystroke],
         };
       }
@@ -273,26 +381,8 @@ function engineReducer(state: TypingEngineState, action: Action, config: TestCon
       return {
         ...state,
         status: 'finished',
+        resultStatus: action.resultStatus || (config.mode === 'zen' ? 'zen' : 'completed'),
         endTime: action.timestamp,
-      };
-    }
-
-    case 'RESET_WORDS': {
-      return {
-        ...state,
-        words: action.words,
-        wordIndex: 0,
-        currentInput: '',
-        completedWords: [],
-        status: 'idle',
-        startTime: null,
-        endTime: null,
-        elapsedSeconds: 0,
-        timeRemaining: action.initialTime,
-        activeKeyCode: null,
-        isKeyError: false,
-        keystrokes: [],
-        secondSnapshots: [],
       };
     }
 
@@ -305,6 +395,8 @@ export function useTypingEngine(
   config: TestConfig,
   onPlaySound?: (type: 'standard' | 'space' | 'error') => void
 ) {
+  const initialTime = config.duration || config.time || 30;
+
   const [state, dispatch] = useReducer(
     (s: TypingEngineState, a: Action) => engineReducer(s, a, config),
     {
@@ -313,40 +405,98 @@ export function useTypingEngine(
       currentInput: '',
       completedWords: [],
       status: 'idle',
+      resultStatus: 'completed',
       startTime: null,
       endTime: null,
       elapsedSeconds: 0,
-      timeRemaining: config.time,
+      timeRemaining: initialTime,
       isFocused: true,
       activeKeyCode: null,
       isKeyError: false,
       keystrokes: [],
       secondSnapshots: [],
+      livesRemaining: config.lives || 1,
+      cleanStreak: 0,
+      bestCleanStreak: 0,
     }
   );
 
   const tabPressedRef = useRef(false);
   const activeKeyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize or reset words on config changes
-  const resetTest = useCallback((customWords?: string[]) => {
-    let newWords: string[];
-    if (customWords && customWords.length > 0) {
-      newWords = customWords;
-    } else {
-      const wordCount = config.mode === 'words' ? config.words : 120;
-      newWords = generateWords(wordCount, {
-        punctuation: config.punctuation,
-        numbers: config.numbers,
-      });
-    }
-    dispatch({ type: 'RESET_WORDS', words: newWords, initialTime: config.time });
-  }, [config.mode, config.words, config.time, config.punctuation, config.numbers]);
+  // Initialize or reset words based on active TestMode
+  const resetTest = useCallback(
+    (customWords?: string[]) => {
+      let newWords: string[];
+      let author: string | undefined = undefined;
 
-  // Initial load inside useEffect to prevent SSR hydration errors
+      if (customWords && customWords.length > 0) {
+        newWords = customWords;
+      } else if (config.mode === 'quote') {
+        const quote = getRandomQuote();
+        newWords = quote.text.split(' ');
+        author = quote.author;
+      } else if (config.mode === 'code') {
+        const snippet = getRandomCodeSnippet(config.language || 'typescript');
+        newWords = snippet.split(' ');
+      } else if (config.mode === 'custom' && config.customText) {
+        newWords = config.customText.trim().split(/\s+/).slice(0, 400);
+      } else if (config.mode === 'daily') {
+        const daily = getDailyChallengeWords();
+        newWords = daily.words;
+      } else {
+        const count =
+          config.mode === 'words'
+            ? config.wordCount || config.words || 25
+            : config.mode === 'zen'
+            ? 120
+            : 100;
+        newWords = generateWords(count, {
+          difficulty: config.difficulty || 'standard',
+          punctuation: config.punctuation,
+          numbers: config.numbers,
+        });
+      }
+
+      dispatch({
+        type: 'RESET_WORDS',
+        words: newWords,
+        initialTime: config.duration || config.time || 30,
+        quoteAuthor: author,
+        initialLives: config.lives || (config.mode === 'suddenDeath' ? 1 : 1),
+      });
+    },
+    [
+      config.mode,
+      config.difficulty,
+      config.wordCount,
+      config.words,
+      config.duration,
+      config.time,
+      config.punctuation,
+      config.numbers,
+      config.customText,
+      config.language,
+      config.lives,
+    ]
+  );
+
+  // Initial load inside useEffect to prevent SSR hydration mismatch
   useEffect(() => {
     resetTest();
   }, [resetTest]);
+
+  // Append words dynamically in Zen mode when nearing the end
+  useEffect(() => {
+    if (config.mode === 'zen' && state.words.length > 0 && state.wordIndex >= state.words.length - 20) {
+      const moreWords = generateWords(60, {
+        difficulty: config.difficulty,
+        punctuation: config.punctuation,
+        numbers: config.numbers,
+      });
+      dispatch({ type: 'APPEND_ZEN_WORDS', words: moreWords });
+    }
+  }, [config.mode, config.difficulty, config.punctuation, config.numbers, state.words.length, state.wordIndex]);
 
   // Timer loop when running
   useEffect(() => {
@@ -375,7 +525,7 @@ export function useTypingEngine(
       // Ignore repeat events
       if (e.repeat) return;
 
-      // Ignore modifiers, F-keys, arrows
+      // Ignore modifiers, F-keys, navigation arrows
       if (
         e.key === 'Shift' ||
         e.key === 'Control' ||
@@ -383,15 +533,19 @@ export function useTypingEngine(
         e.key === 'Meta' ||
         e.key === 'CapsLock' ||
         e.key.startsWith('Arrow') ||
-        e.key.startsWith('F') && e.key.length > 1
+        (e.key.startsWith('F') && e.key.length > 1)
       ) {
         return;
       }
 
-      // Shortcut: Esc = new words
+      // Shortcut: Esc = restart / new words (in zen = finish)
       if (e.key === 'Escape') {
         e.preventDefault();
-        resetTest();
+        if (config.mode === 'zen' && state.status === 'running') {
+          dispatch({ type: 'FINISH', timestamp: performance.now(), resultStatus: 'zen' });
+        } else {
+          resetTest();
+        }
         return;
       }
 
@@ -423,12 +577,12 @@ export function useTypingEngine(
       const charIndex = state.currentInput.length;
       const expectedChar = currentWord[charIndex] || '';
 
-      // Trigger audio feedback
+      // Play audio feedback
       if (onPlaySound) {
         if (e.key === ' ') {
           onPlaySound('space');
         } else if (e.key.length === 1) {
-          if (e.key === expectedChar) {
+          if (e.key === expectedChar || config.mode === 'zen') {
             onPlaySound('standard');
           } else {
             onPlaySound('error');
@@ -443,7 +597,15 @@ export function useTypingEngine(
         timestamp: now,
       });
     },
-    [state.words, state.wordIndex, state.currentInput, onPlaySound, resetTest]
+    [
+      config.mode,
+      state.words,
+      state.wordIndex,
+      state.currentInput,
+      state.status,
+      onPlaySound,
+      resetTest,
+    ]
   );
 
   // Focus and blur listeners
@@ -466,13 +628,14 @@ export function useTypingEngine(
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  // Target expected character and event code for keyboard hint
+  // Target expected character, event code, and shift requirement
   const currentWord = state.words[state.wordIndex] || '';
   const targetChar =
     state.currentInput.length < currentWord.length
       ? currentWord[state.currentInput.length]
       : ' ';
   const targetKeyCode = charToEventCode(targetChar);
+  const targetNeedsShift = isShiftRequired(targetChar);
 
   // Live calculation metrics
   const elapsedMinutes = Math.max(state.elapsedSeconds / 60, 0.001);
@@ -487,9 +650,13 @@ export function useTypingEngine(
     ...state,
     targetChar,
     targetKeyCode,
+    targetNeedsShift,
     liveNetWpm,
     liveAccuracy,
     resetTest,
+    finishTest: (status?: ResultStatus) =>
+      dispatch({ type: 'FINISH', timestamp: performance.now(), resultStatus: status }),
     setFocused: (focused: boolean) => dispatch({ type: 'SET_FOCUSED', focused }),
   };
 }
+
