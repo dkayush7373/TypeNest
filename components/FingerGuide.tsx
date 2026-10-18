@@ -4,216 +4,534 @@ import React from 'react';
 
 interface FingerGuideProps {
   activeFinger?: number | null; // 1-10
+  highlightedKeys?: string[];
 }
 
-interface FingerInfo {
+interface FingerDetail {
   id: number;
   name: string;
   hand: 'left' | 'right';
   homeKey: string;
-  reachKeys: string;
+  reachKeys: string[];
+  color: string;
 }
 
-const FINGERS: FingerInfo[] = [
-  { id: 1, name: 'L. Pinky', hand: 'left', homeKey: 'A', reachKeys: 'Q, Z, 1, Tab, Shift' },
-  { id: 2, name: 'L. Ring', hand: 'left', homeKey: 'S', reachKeys: 'W, X, 2' },
-  { id: 3, name: 'L. Middle', hand: 'left', homeKey: 'D', reachKeys: 'E, C, 3' },
-  { id: 4, name: 'L. Index', hand: 'left', homeKey: 'F', reachKeys: 'R, T, G, V, B, 4, 5' },
-  { id: 5, name: 'Thumbs', hand: 'left', homeKey: 'Space', reachKeys: 'Spacebar' },
-  { id: 7, name: 'R. Index', hand: 'right', homeKey: 'J', reachKeys: 'Y, U, H, N, M, 6, 7' },
-  { id: 8, name: 'R. Middle', hand: 'right', homeKey: 'K', reachKeys: 'I, <, 8' },
-  { id: 9, name: 'R. Ring', hand: 'right', homeKey: 'L', reachKeys: 'O, >, 9' },
-  { id: 10, name: 'R. Pinky', hand: 'right', homeKey: ';', reachKeys: 'P, ?, 0, Enter, Shift' },
+const FINGERS_DATA: FingerDetail[] = [
+  { id: 1, name: 'L. Pinky', hand: 'left', homeKey: 'A', reachKeys: ['Q', 'A', 'Z', '1', 'Tab', 'Shift'], color: '#0d9488' },
+  { id: 2, name: 'L. Ring', hand: 'left', homeKey: 'S', reachKeys: ['W', 'S', 'X', '2'], color: '#059669' },
+  { id: 3, name: 'L. Middle', hand: 'left', homeKey: 'D', reachKeys: ['E', 'D', 'C', '3'], color: '#0891b2' },
+  { id: 4, name: 'L. Index', hand: 'left', homeKey: 'F', reachKeys: ['R', 'T', 'F', 'G', 'V', 'B', '4', '5'], color: '#0284c7' },
+  { id: 5, name: 'Thumbs', hand: 'left', homeKey: 'Space', reachKeys: ['Spacebar'], color: '#64748b' },
+  { id: 7, name: 'R. Index', hand: 'right', homeKey: 'J', reachKeys: ['Y', 'U', 'H', 'J', 'N', 'M', '6', '7'], color: '#0284c7' },
+  { id: 8, name: 'R. Middle', hand: 'right', homeKey: 'K', reachKeys: ['I', 'K', ',', '<', '8'], color: '#0891b2' },
+  { id: 9, name: 'R. Ring', hand: 'right', homeKey: 'L', reachKeys: ['O', 'L', '.', '>', '9'], color: '#059669' },
+  { id: 10, name: 'R. Pinky', hand: 'right', homeKey: ';', reachKeys: ['P', ';', '/', '?', '0', 'Enter', 'Shift'], color: '#0d9488' },
 ];
 
-export const FingerGuide: React.FC<FingerGuideProps> = ({ activeFinger }) => {
+export const FingerGuide: React.FC<FingerGuideProps> = ({
+  activeFinger,
+  highlightedKeys = [],
+}) => {
+  const normHighlighted = highlightedKeys.map((k) => k.toUpperCase());
+
+  const isFingerHighlighted = (finger: FingerDetail): boolean => {
+    if (activeFinger === finger.id) return true;
+    if (normHighlighted.length === 0) return false;
+    return finger.reachKeys.some((k) => normHighlighted.includes(k));
+  };
+
   return (
     <div
-      className="w-full p-5 rounded-lg border border-[var(--border)] bg-[var(--panel)] select-none"
+      className="w-full p-6 rounded-lg border border-[var(--border)] bg-[var(--panel)] select-none"
       aria-label="Tactile Hand Placement & Finger Assignment Guide"
     >
       <div className="flex items-center justify-between mb-4 text-xs font-mono text-[var(--text-muted)]">
         <span className="uppercase tracking-wider">Ergonomic Finger Placement Guide</span>
-        <span className="text-[var(--accent)]">Tactile Home Row (F & J bumps)</span>
+        <span className="text-[var(--accent)] flex items-center space-x-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />
+          <span>Tactile Home Row (F & J bumps)</span>
+        </span>
       </div>
 
-      {/* SVG Hands Anatomy Diagram */}
-      <div className="flex flex-col sm:flex-row items-center justify-around gap-6 py-2">
-        {/* Left Hand SVG */}
-        <div className="flex flex-col items-center">
-          <span className="text-xs font-mono text-[var(--text-muted)] mb-2 uppercase tracking-wide">
-            Left Hand
-          </span>
-          <svg width="180" height="130" viewBox="0 0 180 130" className="overflow-visible">
-            {/* Palm Base */}
+      {/* Redesigned Large SVG Hands Anatomy Diagram */}
+      <div className="w-full flex justify-center py-2">
+        <svg
+          viewBox="0 0 540 220"
+          className="w-full max-w-2xl h-auto overflow-visible"
+          aria-hidden="true"
+        >
+          {/* ================= LEFT HAND ================= */}
+          <g transform="translate(15, 10)">
+            {/* Palm */}
             <path
-              d="M 30 110 Q 30 75 45 60 Q 90 55 125 70 Q 140 90 135 110 Z"
+              d="M 40 180 Q 30 110 60 85 Q 120 75 160 100 Q 185 130 175 180 Z"
               fill="var(--bg)"
               stroke="var(--border)"
               strokeWidth="1.5"
             />
+            <text
+              x="105"
+              y="155"
+              fill="var(--text-muted)"
+              fontSize="11"
+              fontFamily="var(--font-mono), monospace"
+              textAnchor="middle"
+              className="opacity-70"
+            >
+              LEFT HAND
+            </text>
+
             {/* Pinky (Finger 1) */}
-            <rect
-              x="20"
-              y="32"
-              width="16"
-              height="45"
-              rx="8"
-              fill={activeFinger === 1 ? 'var(--accent)' : 'var(--panel)'}
-              stroke={activeFinger === 1 ? 'var(--accent)' : 'var(--border)'}
-              strokeWidth="1.5"
-            />
-            <text x="28" y="58" fill={activeFinger === 1 ? 'var(--accent-contrast)' : 'var(--text)'} fontSize="10" fontFamily="monospace" textAnchor="middle">A</text>
+            {(() => {
+              const f = FINGERS_DATA[0];
+              const hl = isFingerHighlighted(f);
+              return (
+                <g>
+                  <rect
+                    x="25"
+                    y="45"
+                    width="26"
+                    height="68"
+                    rx="13"
+                    fill={hl ? 'var(--accent)' : f.color}
+                    fillOpacity={hl ? 1 : 0.25}
+                    stroke={hl ? 'var(--accent)' : f.color}
+                    strokeWidth="1.5"
+                  />
+                  <text
+                    x="38"
+                    y="72"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text)'}
+                    fontSize="13"
+                    fontWeight="600"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    A
+                  </text>
+                  <text
+                    x="38"
+                    y="92"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text-muted)'}
+                    fontSize="9"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    pinky
+                  </text>
+                </g>
+              );
+            })()}
 
             {/* Ring (Finger 2) */}
-            <rect
-              x="42"
-              y="18"
-              width="18"
-              height="55"
-              rx="9"
-              fill={activeFinger === 2 ? 'var(--accent)' : 'var(--panel)'}
-              stroke={activeFinger === 2 ? 'var(--accent)' : 'var(--border)'}
-              strokeWidth="1.5"
-            />
-            <text x="51" y="48" fill={activeFinger === 2 ? 'var(--accent-contrast)' : 'var(--text)'} fontSize="10" fontFamily="monospace" textAnchor="middle">S</text>
+            {(() => {
+              const f = FINGERS_DATA[1];
+              const hl = isFingerHighlighted(f);
+              return (
+                <g>
+                  <rect
+                    x="57"
+                    y="22"
+                    width="28"
+                    height="85"
+                    rx="14"
+                    fill={hl ? 'var(--accent)' : f.color}
+                    fillOpacity={hl ? 1 : 0.25}
+                    stroke={hl ? 'var(--accent)' : f.color}
+                    strokeWidth="1.5"
+                  />
+                  <text
+                    x="71"
+                    y="55"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text)'}
+                    fontSize="13"
+                    fontWeight="600"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    S
+                  </text>
+                  <text
+                    x="71"
+                    y="75"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text-muted)'}
+                    fontSize="9"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    ring
+                  </text>
+                </g>
+              );
+            })()}
 
             {/* Middle (Finger 3) */}
-            <rect
-              x="66"
-              y="10"
-              width="18"
-              height="62"
-              rx="9"
-              fill={activeFinger === 3 ? 'var(--accent)' : 'var(--panel)'}
-              stroke={activeFinger === 3 ? 'var(--accent)' : 'var(--border)'}
-              strokeWidth="1.5"
-            />
-            <text x="75" y="44" fill={activeFinger === 3 ? 'var(--accent-contrast)' : 'var(--text)'} fontSize="10" fontFamily="monospace" textAnchor="middle">D</text>
+            {(() => {
+              const f = FINGERS_DATA[2];
+              const hl = isFingerHighlighted(f);
+              return (
+                <g>
+                  <rect
+                    x="91"
+                    y="10"
+                    width="28"
+                    height="95"
+                    rx="14"
+                    fill={hl ? 'var(--accent)' : f.color}
+                    fillOpacity={hl ? 1 : 0.25}
+                    stroke={hl ? 'var(--accent)' : f.color}
+                    strokeWidth="1.5"
+                  />
+                  <text
+                    x="105"
+                    y="50"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text)'}
+                    fontSize="13"
+                    fontWeight="600"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    D
+                  </text>
+                  <text
+                    x="105"
+                    y="70"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text-muted)'}
+                    fontSize="9"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    mid
+                  </text>
+                </g>
+              );
+            })()}
 
             {/* Index (Finger 4) */}
-            <rect
-              x="90"
-              y="18"
-              width="18"
-              height="55"
-              rx="9"
-              fill={activeFinger === 4 ? 'var(--accent)' : 'var(--panel)'}
-              stroke={activeFinger === 4 ? 'var(--accent)' : 'var(--border)'}
-              strokeWidth="1.5"
-            />
-            <text x="99" y="48" fill={activeFinger === 4 ? 'var(--accent-contrast)' : 'var(--text)'} fontSize="10" fontFamily="monospace" textAnchor="middle">F*</text>
+            {(() => {
+              const f = FINGERS_DATA[3];
+              const hl = isFingerHighlighted(f);
+              return (
+                <g>
+                  <rect
+                    x="125"
+                    y="22"
+                    width="28"
+                    height="85"
+                    rx="14"
+                    fill={hl ? 'var(--accent)' : f.color}
+                    fillOpacity={hl ? 1 : 0.25}
+                    stroke={hl ? 'var(--accent)' : f.color}
+                    strokeWidth="1.5"
+                  />
+                  <text
+                    x="139"
+                    y="55"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text)'}
+                    fontSize="13"
+                    fontWeight="bold"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    F*
+                  </text>
+                  <text
+                    x="139"
+                    y="75"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text-muted)'}
+                    fontSize="9"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    idx
+                  </text>
+                </g>
+              );
+            })()}
 
             {/* Thumb (Finger 5) */}
-            <rect
-              x="118"
-              y="60"
-              width="36"
-              height="18"
-              rx="9"
-              transform="rotate(25 118 60)"
-              fill={activeFinger === 5 ? 'var(--accent)' : 'var(--panel)'}
-              stroke={activeFinger === 5 ? 'var(--accent)' : 'var(--border)'}
-              strokeWidth="1.5"
-            />
-          </svg>
-        </div>
+            {(() => {
+              const f = FINGERS_DATA[4];
+              const hl = isFingerHighlighted(f);
+              return (
+                <g transform="rotate(32 155 105)">
+                  <rect
+                    x="155"
+                    y="88"
+                    width="50"
+                    height="26"
+                    rx="13"
+                    fill={hl ? 'var(--accent)' : f.color}
+                    fillOpacity={hl ? 1 : 0.25}
+                    stroke={hl ? 'var(--accent)' : f.color}
+                    strokeWidth="1.5"
+                  />
+                  <text
+                    x="180"
+                    y="105"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text)'}
+                    fontSize="10"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    Space
+                  </text>
+                </g>
+              );
+            })()}
+          </g>
 
-        {/* Right Hand SVG */}
-        <div className="flex flex-col items-center">
-          <span className="text-xs font-mono text-[var(--text-muted)] mb-2 uppercase tracking-wide">
-            Right Hand
-          </span>
-          <svg width="180" height="130" viewBox="0 0 180 130" className="overflow-visible">
-            {/* Palm Base */}
+          {/* ================= RIGHT HAND ================= */}
+          <g transform="translate(290, 10)">
+            {/* Palm */}
             <path
-              d="M 45 110 Q 40 90 55 70 Q 90 55 135 60 Q 150 75 150 110 Z"
+              d="M 60 180 Q 50 130 75 100 Q 115 75 175 85 Q 205 110 195 180 Z"
               fill="var(--bg)"
               stroke="var(--border)"
               strokeWidth="1.5"
             />
-            {/* Thumb (Finger 6/5) */}
-            <rect
-              x="26"
-              y="74"
-              width="36"
-              height="18"
-              rx="9"
-              transform="rotate(-25 26 74)"
-              fill={activeFinger === 5 || activeFinger === 6 ? 'var(--accent)' : 'var(--panel)'}
-              stroke={activeFinger === 5 || activeFinger === 6 ? 'var(--accent)' : 'var(--border)'}
-              strokeWidth="1.5"
-            />
+            <text
+              x="130"
+              y="155"
+              fill="var(--text-muted)"
+              fontSize="11"
+              fontFamily="var(--font-mono), monospace"
+              textAnchor="middle"
+              className="opacity-70"
+            >
+              RIGHT HAND
+            </text>
+
+            {/* Thumb (Finger 6) */}
+            {(() => {
+              const f = FINGERS_DATA[4];
+              const hl = isFingerHighlighted(f);
+              return (
+                <g transform="rotate(-32 80 105)">
+                  <rect
+                    x="30"
+                    y="88"
+                    width="50"
+                    height="26"
+                    rx="13"
+                    fill={hl ? 'var(--accent)' : f.color}
+                    fillOpacity={hl ? 1 : 0.25}
+                    stroke={hl ? 'var(--accent)' : f.color}
+                    strokeWidth="1.5"
+                  />
+                  <text
+                    x="55"
+                    y="105"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text)'}
+                    fontSize="10"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    Space
+                  </text>
+                </g>
+              );
+            })()}
 
             {/* Index (Finger 7) */}
-            <rect
-              x="72"
-              y="18"
-              width="18"
-              height="55"
-              rx="9"
-              fill={activeFinger === 7 ? 'var(--accent)' : 'var(--panel)'}
-              stroke={activeFinger === 7 ? 'var(--accent)' : 'var(--border)'}
-              strokeWidth="1.5"
-            />
-            <text x="81" y="48" fill={activeFinger === 7 ? 'var(--accent-contrast)' : 'var(--text)'} fontSize="10" fontFamily="monospace" textAnchor="middle">J*</text>
+            {(() => {
+              const f = FINGERS_DATA[5];
+              const hl = isFingerHighlighted(f);
+              return (
+                <g>
+                  <rect
+                    x="82"
+                    y="22"
+                    width="28"
+                    height="85"
+                    rx="14"
+                    fill={hl ? 'var(--accent)' : f.color}
+                    fillOpacity={hl ? 1 : 0.25}
+                    stroke={hl ? 'var(--accent)' : f.color}
+                    strokeWidth="1.5"
+                  />
+                  <text
+                    x="96"
+                    y="55"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text)'}
+                    fontSize="13"
+                    fontWeight="bold"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    J*
+                  </text>
+                  <text
+                    x="96"
+                    y="75"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text-muted)'}
+                    fontSize="9"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    idx
+                  </text>
+                </g>
+              );
+            })()}
 
             {/* Middle (Finger 8) */}
-            <rect
-              x="96"
-              y="10"
-              width="18"
-              height="62"
-              rx="9"
-              fill={activeFinger === 8 ? 'var(--accent)' : 'var(--panel)'}
-              stroke={activeFinger === 8 ? 'var(--accent)' : 'var(--border)'}
-              strokeWidth="1.5"
-            />
-            <text x="105" y="44" fill={activeFinger === 8 ? 'var(--accent-contrast)' : 'var(--text)'} fontSize="10" fontFamily="monospace" textAnchor="middle">K</text>
+            {(() => {
+              const f = FINGERS_DATA[6];
+              const hl = isFingerHighlighted(f);
+              return (
+                <g>
+                  <rect
+                    x="116"
+                    y="10"
+                    width="28"
+                    height="95"
+                    rx="14"
+                    fill={hl ? 'var(--accent)' : f.color}
+                    fillOpacity={hl ? 1 : 0.25}
+                    stroke={hl ? 'var(--accent)' : f.color}
+                    strokeWidth="1.5"
+                  />
+                  <text
+                    x="130"
+                    y="50"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text)'}
+                    fontSize="13"
+                    fontWeight="600"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    K
+                  </text>
+                  <text
+                    x="130"
+                    y="70"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text-muted)'}
+                    fontSize="9"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    mid
+                  </text>
+                </g>
+              );
+            })()}
 
             {/* Ring (Finger 9) */}
-            <rect
-              x="120"
-              y="18"
-              width="18"
-              height="55"
-              rx="9"
-              fill={activeFinger === 9 ? 'var(--accent)' : 'var(--panel)'}
-              stroke={activeFinger === 9 ? 'var(--accent)' : 'var(--border)'}
-              strokeWidth="1.5"
-            />
-            <text x="129" y="48" fill={activeFinger === 9 ? 'var(--accent-contrast)' : 'var(--text)'} fontSize="10" fontFamily="monospace" textAnchor="middle">L</text>
+            {(() => {
+              const f = FINGERS_DATA[7];
+              const hl = isFingerHighlighted(f);
+              return (
+                <g>
+                  <rect
+                    x="150"
+                    y="22"
+                    width="28"
+                    height="85"
+                    rx="14"
+                    fill={hl ? 'var(--accent)' : f.color}
+                    fillOpacity={hl ? 1 : 0.25}
+                    stroke={hl ? 'var(--accent)' : f.color}
+                    strokeWidth="1.5"
+                  />
+                  <text
+                    x="164"
+                    y="55"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text)'}
+                    fontSize="13"
+                    fontWeight="600"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    L
+                  </text>
+                  <text
+                    x="164"
+                    y="75"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text-muted)'}
+                    fontSize="9"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    ring
+                  </text>
+                </g>
+              );
+            })()}
 
             {/* Pinky (Finger 10) */}
-            <rect
-              x="144"
-              y="32"
-              width="16"
-              height="45"
-              rx="8"
-              fill={activeFinger === 10 ? 'var(--accent)' : 'var(--panel)'}
-              stroke={activeFinger === 10 ? 'var(--accent)' : 'var(--border)'}
-              strokeWidth="1.5"
-            />
-            <text x="152" y="58" fill={activeFinger === 10 ? 'var(--accent-contrast)' : 'var(--text)'} fontSize="10" fontFamily="monospace" textAnchor="middle">;</text>
-          </svg>
-        </div>
+            {(() => {
+              const f = FINGERS_DATA[8];
+              const hl = isFingerHighlighted(f);
+              return (
+                <g>
+                  <rect
+                    x="184"
+                    y="45"
+                    width="26"
+                    height="68"
+                    rx="13"
+                    fill={hl ? 'var(--accent)' : f.color}
+                    fillOpacity={hl ? 1 : 0.25}
+                    stroke={hl ? 'var(--accent)' : f.color}
+                    strokeWidth="1.5"
+                  />
+                  <text
+                    x="197"
+                    y="72"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text)'}
+                    fontSize="13"
+                    fontWeight="600"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    ;
+                  </text>
+                  <text
+                    x="197"
+                    y="92"
+                    fill={hl ? 'var(--accent-contrast)' : 'var(--text-muted)'}
+                    fontSize="9"
+                    fontFamily="var(--font-mono), monospace"
+                    textAnchor="middle"
+                  >
+                    pinky
+                  </text>
+                </g>
+              );
+            })()}
+          </g>
+        </svg>
       </div>
 
       {/* Finger Reach Assignments Grid */}
       <div className="mt-4 pt-3 border-t border-[var(--border)] grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
-        {FINGERS.filter((f) => f.id !== 5).slice(0, 4).map((f) => (
-          <div key={f.id} className="p-2 rounded border border-[var(--border)] bg-[var(--bg)]">
-            <span className="text-[var(--accent)] font-semibold">{f.name}:</span>
-            <span className="text-[var(--text-muted)] ml-1">{f.reachKeys}</span>
-          </div>
-        ))}
-        {FINGERS.filter((f) => f.id !== 5).slice(4, 8).map((f) => (
-          <div key={f.id} className="p-2 rounded border border-[var(--border)] bg-[var(--bg)]">
-            <span className="text-[var(--accent)] font-semibold">{f.name}:</span>
-            <span className="text-[var(--text-muted)] ml-1">{f.reachKeys}</span>
-          </div>
-        ))}
+        {FINGERS_DATA.filter((f) => f.id !== 5).map((f) => {
+          const hl = isFingerHighlighted(f);
+          return (
+            <div
+              key={f.id}
+              className={`p-2.5 rounded border transition-colors ${
+                hl
+                  ? 'border-[var(--accent)] bg-[var(--bg)] shadow-xs'
+                  : 'border-[var(--border)] bg-[var(--bg)]'
+              }`}
+            >
+              <div className="flex items-center space-x-1.5 mb-1">
+                <span
+                  className="w-2 h-2 rounded-full inline-block"
+                  style={{ backgroundColor: f.color }}
+                />
+                <span className={hl ? 'text-[var(--accent)] font-semibold' : 'text-[var(--text)]'}>
+                  {f.name}
+                </span>
+              </div>
+              <span className="text-[11px] text-[var(--text-muted)] line-clamp-1">
+                {f.reachKeys.join(' ')}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

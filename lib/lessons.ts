@@ -12,11 +12,12 @@ export const LESSONS: Lesson[] = [
     id: 'home-row',
     title: '1. Home Row Mastery',
     description:
-      'The foundation of touch typing. Rest your left hand on ASDF and your right hand on JKL;. Feel the tactile bumps on F and J.',
+      'The foundation of touch typing. Rest your left hand on ASDF and your right hand on JKL;. Feel the tactile bumps on F and J. Every drill word here uses ONLY Home Row keys.',
     keys: ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';'],
     sampleWords: [
       'as', 'ask', 'all', 'fall', 'glad', 'half', 'hall', 'flash', 'flask',
-      'salad', 'dash', 'slash', 'glass', 'had', 'has', 'lass', 'dad', 'lad'
+      'salad', 'dash', 'slash', 'glass', 'had', 'has', 'lass', 'dad', 'lad',
+      'gala', 'saga', 'flag', 'slag', 'gash', 'shah', 'dall', 'fad'
     ],
     requiredAccuracy: 95,
   },
@@ -24,11 +25,12 @@ export const LESSONS: Lesson[] = [
     id: 'top-row',
     title: '2. Top Row Reach',
     description:
-      'Reach upward from home row with fluid, minimal finger movement. Return your fingers promptly to home row after each strike.',
+      'Reach upward from home row with fluid, minimal finger movement. Return your fingers promptly to home row after each strike. Every word here uses ONLY Top Row keys.',
     keys: ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
     sampleWords: [
-      'the', 'were', 'write', 'power', 'quiet', 'tree', 'pour', 'route',
-      'wire', 'tire', 'tower', 'quit', 'port', 'pure', 'rope', 'trip', 'ripe'
+      'type', 'write', 'power', 'quiet', 'pure', 'pour', 'route', 'tower',
+      'tree', 'root', 'rope', 'port', 'wire', 'tire', 'trip', 'quit',
+      'quite', 'query', 'retry', 'potter', 'pepper', 'top', 'pot', 'wet', 'pet'
     ],
     requiredAccuracy: 95,
   },
@@ -36,11 +38,12 @@ export const LESSONS: Lesson[] = [
     id: 'bottom-row',
     title: '3. Bottom Row Incline',
     description:
-      'Curl your fingers smoothly downward to strike bottom row keys without twisting your wrists. Keep wrists elevated and relaxed.',
+      'Curl your fingers smoothly downward to strike bottom row keys without twisting your wrists. Practice rhythmic bottom row sequences and comma/period strikes.',
     keys: ['z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/'],
     sampleWords: [
-      'van', 'cab', 'man', 'can', 'ban', 'box', 'mix', 'zinc', 'calm',
-      'back', 'next', 'vocal', 'zone', 'bomb', 'comb', 'bank', 'blank', 'clan'
+      'zxcv', 'bnm,', 'zxcv.', 'bnm/', 'z,x.', 'c,v.', 'b,n.', 'm,/',
+      'cz', 'xb', 'vn', 'zm', 'cx', 'vb', 'nm', 'z.x', 'c.v', 'b.n', 'm./',
+      'zz', 'xx', 'cc', 'vv', 'bb', 'nn', 'mm'
     ],
     requiredAccuracy: 95,
   },
@@ -63,9 +66,29 @@ export const LESSONS: Lesson[] = [
       'Combine Shift key chords and symbol reaches. Crucial for coding syntax and professional prose.',
     keys: ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '{', '}', ':', '"', '<', '>', '?'],
     sampleWords: [
-      'key:val;', '{code}', '(call)', 'id#1', '100%', 'sum+1', 'done!',
-      'true;', 'array[0]', 'func()', 'str="val"', 'a>b', 'flag?', 'item&next'
+      '(!)', '{#}', '[$]', '(&)', '(*)', '(?!)', '(+)', '(_)',
+      '{"key"}', '<data>', '100%', 'sum+1', '#tag', 'a>b', 'flag?', 'done!'
     ],
     requiredAccuracy: 95,
   },
 ];
+
+/**
+ * Generates drill words composed strictly from the lesson's keys.
+ */
+export function generateLessonDrillWords(lesson: Lesson, count: number = 25): string[] {
+  const allowed = new Set(lesson.keys.map((k) => k.toLowerCase()));
+  // Filter sample words that strictly contain only allowed keys
+  const validWords = lesson.sampleWords.filter((word) =>
+    word.split('').every((ch) => allowed.has(ch.toLowerCase()))
+  );
+
+  const pool = validWords.length > 0 ? validWords : lesson.sampleWords;
+  const result: string[] = [];
+
+  for (let i = 0; i < count; i++) {
+    result.push(pool[Math.floor(Math.random() * pool.length)]);
+  }
+
+  return result;
+}

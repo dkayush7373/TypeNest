@@ -37,7 +37,7 @@ export const LearnView: React.FC<LearnViewProps> = ({ onStartLessonPractice }) =
     <div className="w-full max-w-4xl flex flex-col space-y-8 animate-fadeIn">
       {/* Header */}
       <div className="pb-4 border-b border-[var(--border)]">
-        <h2 className="text-2xl font-bold tracking-tight text-[var(--text)]">
+        <h2 className="text-2xl font-bold tracking-normal text-[var(--text)]">
           Touch Typing Curriculum
         </h2>
         <p className="text-xs font-mono text-[var(--text-muted)] mt-1">
@@ -76,7 +76,7 @@ export const LearnView: React.FC<LearnViewProps> = ({ onStartLessonPractice }) =
                 )}
               </div>
 
-              <h3 className="font-semibold text-xs tracking-tight text-[var(--text)] mb-1 truncate">
+              <h3 className="font-semibold text-xs tracking-normal text-[var(--text)] mb-1 truncate">
                 {lesson.title.replace(/^\d+\.\s*/, '')}
               </h3>
 
@@ -98,7 +98,7 @@ export const LearnView: React.FC<LearnViewProps> = ({ onStartLessonPractice }) =
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[var(--border)]">
           <div>
             <div className="flex items-center space-x-2 mb-1">
-              <h3 className="text-xl font-bold tracking-tight text-[var(--text)]">
+              <h3 className="text-xl font-bold tracking-normal text-[var(--text)]">
                 {selectedLesson.title}
               </h3>
               {isCompleted && (
@@ -138,8 +138,8 @@ export const LearnView: React.FC<LearnViewProps> = ({ onStartLessonPractice }) =
           </div>
         </div>
 
-        {/* Interactive Finger Anatomy Guide */}
-        <FingerGuide />
+        {/* Interactive Finger Anatomy Guide with Highlighted Keys */}
+        <FingerGuide highlightedKeys={selectedLesson.keys} />
 
         {/* Action Button */}
         <div className="pt-4 flex items-center justify-between border-t border-[var(--border)]">
