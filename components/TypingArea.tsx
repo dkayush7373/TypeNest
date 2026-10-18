@@ -14,7 +14,55 @@ interface TypingAreaProps {
   caretStyle?: 'line' | 'block' | 'underline';
 }
 
-export const TypingArea: React.FC<TypingAreaProps> = ({
+interface CompletedWordsProps {
+  completedWords: CompletedWord[];
+}
+
+const CompletedWordsList = React.memo(function CompletedWordsList({
+  completedWords,
+}: CompletedWordsProps) {
+  return (
+    <>
+      {completedWords.map((cw, i) => (
+        <span
+          key={`completed-${i}`}
+          className={`mr-3 inline-block transition-colors ${
+            cw.correct
+              ? 'text-[var(--text)]'
+              : 'text-[var(--error)] underline decoration-[var(--error)]/60 underline-offset-4'
+          }`}
+        >
+          {cw.typed}
+        </span>
+      ))}
+    </>
+  );
+});
+
+interface FutureWordsProps {
+  words: string[];
+  startIndex: number;
+}
+
+const FutureWordsList = React.memo(function FutureWordsList({
+  words,
+  startIndex,
+}: FutureWordsProps) {
+  return (
+    <>
+      {words.slice(startIndex).map((w, futureIdx) => (
+        <span
+          key={`future-${futureIdx}`}
+          className="mr-3 inline-block text-[var(--text-muted)] opacity-60"
+        >
+          {w}
+        </span>
+      ))}
+    </>
+  );
+});
+
+export const TypingArea: React.FC<TypingAreaProps> = React.memo(function TypingArea({
   words,
   wordIndex,
   currentInput,
@@ -22,7 +70,7 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
   isFocused,
   onFocusRequest,
   caretStyle = 'line',
-}) => {
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const activeWordRef = useRef<HTMLSpanElement>(null);
 
@@ -70,21 +118,8 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
         ref={containerRef}
         className="typing-text w-full max-h-[140px] overflow-hidden leading-relaxed text-[var(--text-muted)] tracking-wide"
       >
-        {/* Completed Words */}
-        {completedWords.map((cw, i) => {
-          return (
-            <span
-              key={`completed-${i}`}
-              className={`mr-3 inline-block transition-colors ${
-                cw.correct
-                  ? 'text-[var(--text)]'
-                  : 'text-[var(--error)] underline decoration-[var(--error)]/60 underline-offset-4'
-              }`}
-            >
-              {cw.typed}
-            </span>
-          );
-        })}
+        {/* Completed Words (Memoized) */}
+        <CompletedWordsList completedWords={completedWords} />
 
         {/* Current Active Word */}
         {currentWord && (
@@ -154,16 +189,9 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
           </span>
         )}
 
-        {/* Future Words */}
-        {words.slice(wordIndex + 1).map((w, futureIdx) => (
-          <span
-            key={`future-${futureIdx}`}
-            className="mr-3 inline-block text-[var(--text-muted)] opacity-60"
-          >
-            {w}
-          </span>
-        ))}
+        {/* Future Words (Memoized) */}
+        <FutureWordsList words={words} startIndex={wordIndex + 1} />
       </div>
     </div>
   );
-};
+});

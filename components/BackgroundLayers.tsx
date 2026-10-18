@@ -6,10 +6,13 @@ interface BackgroundLayersProps {
   isTyping?: boolean;
 }
 
-export const BackgroundLayers: React.FC<BackgroundLayersProps> = ({ isTyping = false }) => {
+export const BackgroundLayers: React.FC<BackgroundLayersProps> = React.memo(function BackgroundLayers({
+  isTyping = false,
+}) {
   return (
     <div
       className="fixed inset-0 pointer-events-none z-0 overflow-hidden"
+      style={{ contain: 'strict' }}
       aria-hidden="true"
     >
       {/* Layer 2: Depth - single soft radial light behind typing area */}
@@ -18,6 +21,7 @@ export const BackgroundLayers: React.FC<BackgroundLayersProps> = ({ isTyping = f
         style={{
           background: `radial-gradient(ellipse 900px 500px at 50% 36%, var(--radial-light) 0%, transparent 75%)`,
           opacity: isTyping ? 'var(--radial-opacity)' : 'calc(var(--radial-opacity) * 1.1)',
+          willChange: 'opacity',
         }}
       />
 
@@ -31,6 +35,7 @@ export const BackgroundLayers: React.FC<BackgroundLayersProps> = ({ isTyping = f
           maskImage: 'radial-gradient(ellipse 70% 60% at 50% 40%, black 20%, transparent 80%)',
           WebkitMaskImage: 'radial-gradient(ellipse 70% 60% at 50% 40%, black 20%, transparent 80%)',
           opacity: isTyping ? 0.35 : 1,
+          willChange: 'opacity',
         }}
       />
 
@@ -59,4 +64,4 @@ export const BackgroundLayers: React.FC<BackgroundLayersProps> = ({ isTyping = f
       />
     </div>
   );
-};
+});

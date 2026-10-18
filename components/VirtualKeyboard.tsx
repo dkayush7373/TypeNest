@@ -28,7 +28,7 @@ const FINGER_DOT_COLORS: Record<number, string> = {
   10: 'bg-teal-500/40', // right pinky
 };
 
-export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
+export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = React.memo(function VirtualKeyboard({
   layout = 'qwerty',
   customLayouts = [],
   activeKeyCode,
@@ -37,7 +37,7 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
   targetNeedsShift = false,
   showFingerGuides = false,
   className = '',
-}) => {
+}) {
   const layoutMatrix = useMemo(
     () => getKeyboardLayout(layout, customLayouts),
     [layout, customLayouts]
@@ -130,5 +130,5 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
       </div>
     </div>
   );
-};
+});
 
