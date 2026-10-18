@@ -66,8 +66,9 @@ export const LESSONS: Lesson[] = [
       'Combine Shift key chords and symbol reaches. Crucial for coding syntax and professional prose.',
     keys: ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '{', '}', ':', '"', '<', '>', '?'],
     sampleWords: [
-      '(!)', '{#}', '[$]', '(&)', '(*)', '(?!)', '(+)', '(_)',
-      '{"key"}', '<data>', '100%', 'sum+1', '#tag', 'a>b', 'flag?', 'done!'
+      '(!)', '{#}', '(:)', '(&)', '(*)', '(?!)', '(+)', '(_)',
+      '#_#', '?:!', '(!?)', '{+}', '::', '""', '<<>>', '<>',
+      '*_*', '!_!', '(&&)', '++'
     ],
     requiredAccuracy: 95,
   },
