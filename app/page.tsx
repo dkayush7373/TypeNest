@@ -1,20 +1,31 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import { ActiveTab, TestConfig } from '@/types';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { ActiveTab, TestConfig, TestResult } from '@/types';
 import { BackgroundLayers } from '@/components/BackgroundLayers';
 import { TopBar } from '@/components/TopBar';
 import { StatsBar } from '@/components/StatsBar';
 import { TypingArea } from '@/components/TypingArea';
 import { VirtualKeyboard } from '@/components/VirtualKeyboard';
+import { ResultScreen } from '@/components/ResultScreen';
 import { useTypingEngine } from '@/hooks/useTypingEngine';
 import { useSound } from '@/hooks/useSound';
-import { RefreshCw, Command, RotateCcw, Keyboard as KeyboardIcon } from 'lucide-react';
+import { calculateMetrics, buildTestResult } from '@/lib/metrics';
+import { getSafeStorage, setSafeStorage } from '@/lib/storage';
+import { RefreshCw, Command, Keyboard as KeyboardIcon } from 'lucide-react';
+
+const PB_STORAGE_KEY = 'keyflow:personal_best';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('test');
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showKeyboard, setShowKeyboard] = useState(true);
+  const [previousResult, setPreviousResult] = useState<TestResult | null>(null);
+
+  // Personal Best from safe storage
+  const [personalBest, setPersonalBest] = useState<number | null>(() => {
+    return getSafeStorage<number | null>(PB_STORAGE_KEY, null);
+  });
 
   // Test configuration
   const [config, setConfig] = useState<TestConfig>({
@@ -38,11 +49,59 @@ export default function Home() {
   // Typing engine
   const engine = useTypingEngine(config, handlePlaySound);
 
-  const handleConfigChange = (newConfig: TestConfig) => {
-    setConfig(newConfig);
+  const isRunning = engine.status === 'running';
+
+  // Compute test result once finished
+  const currentResult: TestResult | null = useMemo(() => {
+    if (engine.status !== 'finished') return null;
+
+    const metrics = calculateMetrics(
+      config,
+      engine.keystrokes,
+      engine.completedWords,
+      engine.secondSnapshots,
+      engine.startTime,
+      engine.endTime
+    );
+
+    return buildTestResult(config, metrics, engine.secondSnapshots);
+  }, [
+    engine.status,
+    config,
+    engine.keystrokes,
+    engine.completedWords,
+    engine.secondSnapshots,
+    engine.startTime,
+    engine.endTime,
+  ]);
+
+  // Synchronize personal best when test finishes
+  useEffect(() => {
+    if (engine.status === 'finished' && currentResult) {
+      const storedPb = getSafeStorage<number | null>(PB_STORAGE_KEY, null);
+      if (storedPb === null || currentResult.netWpm > storedPb) {
+        setSafeStorage(PB_STORAGE_KEY, currentResult.netWpm);
+        const timer = setTimeout(() => {
+          setPersonalBest(currentResult.netWpm);
+        }, 0);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [engine.status, currentResult]);
+
+  const handleTryAgain = () => {
+    if (currentResult) {
+      setPreviousResult(currentResult);
+    }
+    engine.resetTest();
   };
 
-  const isRunning = engine.status === 'running';
+  const handleNextTest = () => {
+    if (currentResult) {
+      setPreviousResult(currentResult);
+    }
+    engine.resetTest();
+  };
 
   return (
     <div
@@ -75,50 +134,31 @@ export default function Home() {
 
         {activeTab === 'test' && (
           <div className="w-full flex flex-col items-center space-y-6 sm:space-y-8">
-            {/* Live Stats & Config Controls */}
-            <StatsBar
-              config={config}
-              onConfigChange={handleConfigChange}
-              wpm={engine.liveNetWpm}
-              accuracy={engine.liveAccuracy}
-              timeRemaining={engine.timeRemaining}
-              wordProgress={{
-                current: Math.min(engine.wordIndex + 1, config.words),
-                total: config.words,
-              }}
-              isRunning={isRunning}
-            />
-
-            {/* Test Finished Quick Banner (Stage 2) */}
-            {engine.status === 'finished' ? (
-              <div className="w-full max-w-4xl p-8 rounded-lg border border-[var(--border)] bg-[var(--panel)] text-center space-y-6">
-                <div className="flex flex-col items-center space-y-2">
-                  <span className="text-xs uppercase font-mono tracking-widest text-[var(--text-muted)]">
-                    Test Completed
-                  </span>
-                  <div className="flex items-baseline space-x-3">
-                    <span className="text-6xl font-bold font-mono text-[var(--accent)] num-tabular">
-                      {engine.liveNetWpm}
-                    </span>
-                    <span className="text-sm font-mono text-[var(--text-muted)]">WPM</span>
-                  </div>
-                  <p className="text-sm font-mono text-[var(--text-muted)]">
-                    Accuracy: <span className="text-[var(--text)] font-semibold">{engine.liveAccuracy}%</span> • Keystrokes: <span className="text-[var(--text)] font-semibold">{engine.keystrokes.length}</span>
-                  </p>
-                </div>
-
-                <div className="flex justify-center space-x-4">
-                  <button
-                    onClick={() => engine.resetTest()}
-                    className="px-6 py-2.5 rounded-md font-mono text-sm font-medium bg-[var(--accent)] text-[var(--accent-contrast)] hover:opacity-90 active:translate-y-[1px] transition-all flex items-center space-x-2"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    <span>Try Again</span>
-                  </button>
-                </div>
-              </div>
+            {/* Show ResultScreen when finished, otherwise show test canvas */}
+            {engine.status === 'finished' && currentResult ? (
+              <ResultScreen
+                result={currentResult}
+                previousResult={previousResult}
+                personalBest={personalBest}
+                onTryAgain={handleTryAgain}
+                onNextTest={handleNextTest}
+              />
             ) : (
               <>
+                {/* Live Stats & Config Controls */}
+                <StatsBar
+                  config={config}
+                  onConfigChange={(newCfg) => setConfig(newCfg)}
+                  wpm={engine.liveNetWpm}
+                  accuracy={engine.liveAccuracy}
+                  timeRemaining={engine.timeRemaining}
+                  wordProgress={{
+                    current: Math.min(engine.wordIndex + 1, config.words),
+                    total: config.words,
+                  }}
+                  isRunning={isRunning}
+                />
+
                 {/* Typing Area Canvas */}
                 <TypingArea
                   words={engine.words}
