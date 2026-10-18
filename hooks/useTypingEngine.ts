@@ -329,12 +329,17 @@ export function useTypingEngine(
   const activeKeyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize or reset words on config changes
-  const resetTest = useCallback(() => {
-    const wordCount = config.mode === 'words' ? config.words : 120;
-    const newWords = generateWords(wordCount, {
-      punctuation: config.punctuation,
-      numbers: config.numbers,
-    });
+  const resetTest = useCallback((customWords?: string[]) => {
+    let newWords: string[];
+    if (customWords && customWords.length > 0) {
+      newWords = customWords;
+    } else {
+      const wordCount = config.mode === 'words' ? config.words : 120;
+      newWords = generateWords(wordCount, {
+        punctuation: config.punctuation,
+        numbers: config.numbers,
+      });
+    }
     dispatch({ type: 'RESET_WORDS', words: newWords, initialTime: config.time });
   }, [config.mode, config.words, config.time, config.punctuation, config.numbers]);
 

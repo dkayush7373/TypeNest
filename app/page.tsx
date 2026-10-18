@@ -17,6 +17,7 @@ import { useHistory } from '@/hooks/useHistory';
 import { calculateMetrics, buildTestResult } from '@/lib/metrics';
 import { getSafeStorage, setSafeStorage } from '@/lib/storage';
 import { Lesson, LESSONS } from '@/lib/lessons';
+import { generateWeakKeysWords } from '@/lib/wordLists';
 import { RefreshCw, Command, Keyboard as KeyboardIcon, Sparkles } from 'lucide-react';
 
 const SETTINGS_STORAGE_KEY = 'keyflow:settings';
@@ -174,10 +175,11 @@ export default function Home() {
   // Launch focused weak keys practice
   const handlePracticeWeakKeys = (weakKeys: string[]) => {
     if (weakKeys.length === 0) return;
+    const drillWords = generateWeakKeysWords(weakKeys, 25);
     setIsPracticingWeakKeys(true);
     setActiveLesson(null);
     setActiveTab('test');
-    engine.resetTest();
+    engine.resetTest(drillWords);
   };
 
   // Launch lesson practice drill
@@ -185,7 +187,13 @@ export default function Home() {
     setActiveLesson(lesson);
     setIsPracticingWeakKeys(false);
     setActiveTab('test');
-    engine.resetTest();
+    const drillWords: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      drillWords.push(
+        lesson.sampleWords[Math.floor(Math.random() * lesson.sampleWords.length)]
+      );
+    }
+    engine.resetTest(drillWords);
   };
 
   return (

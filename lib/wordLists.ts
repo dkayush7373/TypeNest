@@ -53,3 +53,33 @@ export function generateWords(count: number, options: { punctuation?: boolean; n
 
   return words;
 }
+
+export function generateWeakKeysWords(weakKeys: string[], count: number = 25): string[] {
+  if (weakKeys.length === 0) {
+    return generateWords(count);
+  }
+
+  const lowerWeakKeys = weakKeys.map((k) => k.toLowerCase());
+  const matchingWords = COMMON_WORDS.filter((word) =>
+    lowerWeakKeys.some((k) => word.toLowerCase().includes(k))
+  );
+
+  const pool = matchingWords.length >= 8 ? matchingWords : COMMON_WORDS;
+  const result: string[] = [];
+
+  for (let i = 0; i < count; i++) {
+    // 70% of words pick from matching pool, 30% synthetic focused repetition
+    if (Math.random() < 0.7 && pool.length > 0) {
+      const w = pool[Math.floor(Math.random() * pool.length)];
+      result.push(w);
+    } else {
+      const randKey = lowerWeakKeys[Math.floor(Math.random() * lowerWeakKeys.length)];
+      const fillers = ['a', 'e', 'i', 'o', 'u', 'r', 's', 't', 'n'];
+      const f1 = fillers[Math.floor(Math.random() * fillers.length)];
+      const f2 = fillers[Math.floor(Math.random() * fillers.length)];
+      result.push(`${f1}${randKey}${f2}`);
+    }
+  }
+
+  return result;
+}
