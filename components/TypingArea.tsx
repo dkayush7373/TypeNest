@@ -49,7 +49,7 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
   return (
     <div
       onClick={onFocusRequest}
-      className="relative w-full max-w-4xl p-6 sm:p-8 rounded-lg border border-[var(--border)] bg-[var(--panel)] cursor-text select-none min-h-[190px] flex items-center"
+      className="relative w-full max-w-4xl p-5 sm:p-6 rounded-lg border border-[var(--border)] bg-[var(--panel)] cursor-text select-none min-h-[160px] flex items-center"
       aria-label="Typing test canvas"
     >
       {/* Blur overlay when window is unfocused */}

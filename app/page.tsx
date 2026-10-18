@@ -16,7 +16,7 @@ import { useSound } from '@/hooks/useSound';
 import { useHistory } from '@/hooks/useHistory';
 import { calculateMetrics, buildTestResult } from '@/lib/metrics';
 import { getSafeStorage, setSafeStorage } from '@/lib/storage';
-import { Lesson, LESSONS } from '@/lib/lessons';
+import { Lesson, LESSONS, generateLessonDrillWords } from '@/lib/lessons';
 import { generateWeakKeysWords } from '@/lib/wordLists';
 import { RefreshCw, Command, Keyboard as KeyboardIcon, Sparkles } from 'lucide-react';
 
@@ -187,12 +187,7 @@ export default function Home() {
     setActiveLesson(lesson);
     setIsPracticingWeakKeys(false);
     setActiveTab('test');
-    const drillWords: string[] = [];
-    for (let i = 0; i < 20; i++) {
-      drillWords.push(
-        lesson.sampleWords[Math.floor(Math.random() * lesson.sampleWords.length)]
-      );
-    }
+    const drillWords = generateLessonDrillWords(lesson, 20);
     engine.resetTest(drillWords);
   };
 
@@ -225,16 +220,16 @@ export default function Home() {
       />
 
       {/* Main Content Workspace */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center max-w-5xl w-full mx-auto px-4 sm:px-6 py-4 sm:py-6">
         {/* Mobile polite notice */}
-        <div className="md:hidden w-full mb-6 p-4 rounded-md border border-[var(--border)] bg-[var(--panel)] text-center text-xs font-mono text-[var(--text-muted)]">
+        <div className="md:hidden w-full mb-4 p-3 rounded-md border border-[var(--border)] bg-[var(--panel)] text-center text-xs font-mono text-[var(--text-muted)]">
           <p className="text-[var(--text)] font-medium mb-1">Physical Keyboard Recommended</p>
           <p>KeyFlow is optimized for desktop and tactile mechanical typing experiences.</p>
         </div>
 
         {/* 1. TEST TAB */}
         {activeTab === 'test' && (
-          <div className="w-full flex flex-col items-center space-y-6 sm:space-y-8">
+          <div className="w-full flex flex-col items-center space-y-4 sm:space-y-6">
             {/* Active Drill / Weak Key Header Banner */}
             {activeLesson && (
               <div className="w-full max-w-4xl p-3 rounded-md border border-[var(--accent)]/40 bg-[var(--accent-soft)] flex items-center justify-between text-xs font-mono">

@@ -76,7 +76,11 @@ export const Heatmap: React.FC<HeatmapProps> = ({ missedKeys }) => {
                     borderColor: borderColor,
                     color: textColor,
                   }}
-                  title={misses > 0 ? `${keyDef.label}: ${misses} missed` : keyDef.label}
+                  title={
+                    misses > 0
+                      ? `${keyDef.label}: ${misses} ${misses === 1 ? 'miss' : 'misses'}`
+                      : keyDef.label
+                  }
                 >
                   <span className="leading-none font-medium">
                     {keyDef.label}

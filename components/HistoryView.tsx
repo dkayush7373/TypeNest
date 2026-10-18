@@ -66,7 +66,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         </div>
 
         <div className="space-y-2 max-w-md">
-          <h2 className="text-xl font-medium tracking-tight text-[var(--text)]">
+          <h2 className="text-xl font-medium tracking-normal text-[var(--text)]">
             No Typing Sessions Recorded Yet
           </h2>
           <p className="text-sm font-mono text-[var(--text-muted)] leading-relaxed">
@@ -90,7 +90,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       {/* Header and Clear Data Dialog */}
       <div className="flex items-center justify-between pb-4 border-b border-[var(--border)]">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-[var(--text)]">
+          <h2 className="text-2xl font-bold tracking-normal text-[var(--text)]">
             Practice History & Analytics
           </h2>
           <p className="text-xs font-mono text-[var(--text-muted)] mt-1">
@@ -215,7 +215,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           </div>
         </div>
 
-        <div className="w-full h-[calc(100%-2rem)]">
+        {history.length < 5 && (
+          <div className="mb-2 px-3 py-1.5 rounded border border-[var(--border)] bg-[var(--bg)] text-center text-xs font-mono text-[var(--text-muted)]">
+            Complete at least 5 tests to view trajectory trends and rolling averages ({history.length}/5 done).
+          </div>
+        )}
+
+        <div className="w-full h-[calc(100%-2.5rem)]">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={recent30} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <CartesianGrid
@@ -293,7 +299,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                   className="px-2.5 py-1 rounded border border-[var(--error)]/40 bg-[var(--error-soft)] text-xs font-mono text-[var(--error)] flex items-center space-x-1.5"
                 >
                   <kbd className="font-bold">{char.toUpperCase()}</kbd>
-                  <span className="text-[10px] opacity-75">{count} misses</span>
+                  <span className="text-[10px] opacity-75">
+                    {count} {count === 1 ? 'miss' : 'misses'}
+                  </span>
                 </span>
               ))}
             </div>
