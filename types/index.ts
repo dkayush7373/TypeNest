@@ -1,4 +1,4 @@
-export type ThemeMode = 'midnight' | 'ember' | 'paper';
+export type ThemeMode = 'midnight' | 'ember' | 'paper' | 'forest';
 
 export type TestMode = 'time' | 'words';
 export type TimeOption = 15 | 30 | 60 | 120;

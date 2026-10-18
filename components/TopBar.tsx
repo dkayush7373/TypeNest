@@ -3,7 +3,7 @@
 import React from 'react';
 import { ActiveTab, ThemeMode } from '@/types';
 import { useTheme } from '@/hooks/useTheme';
-import { Volume2, VolumeX } from 'lucide-react';
+import { Volume2, VolumeX, Settings as SettingsIcon } from 'lucide-react';
 
 interface TopBarProps {
   activeTab: ActiveTab;
@@ -24,6 +24,7 @@ export const TopBar: React.FC<TopBarProps> = ({
     { id: 'midnight', label: 'Midnight' },
     { id: 'ember', label: 'Ember' },
     { id: 'paper', label: 'Paper' },
+    { id: 'forest', label: 'Forest' },
   ];
 
   const navItems: { id: ActiveTab; label: string }[] = [
@@ -64,7 +65,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           </div>
 
           <div className="flex flex-col">
-            <span className="font-semibold text-base tracking-tight text-[var(--text)]">
+            <span className="font-semibold text-base tracking-normal text-[var(--text)]">
               KeyFlow
             </span>
             <span className="text-[10px] tracking-wider uppercase text-[var(--text-muted)] font-mono -mt-1">
@@ -102,8 +103,8 @@ export const TopBar: React.FC<TopBarProps> = ({
           })}
         </nav>
 
-        {/* Right Controls: Sound & Theme Switcher */}
-        <div className="flex items-center space-x-4">
+        {/* Right Controls: Sound, Quick Settings & Theme Switcher */}
+        <div className="flex items-center space-x-3">
           {onToggleSound && (
             <button
               onClick={onToggleSound}
@@ -118,6 +119,20 @@ export const TopBar: React.FC<TopBarProps> = ({
               )}
             </button>
           )}
+
+          {/* Quick Settings Button */}
+          <button
+            onClick={() => onTabChange('settings')}
+            aria-label="Open workspace settings"
+            className={`p-1.5 rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] ${
+              activeTab === 'settings'
+                ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--panel)]'
+                : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]'
+            }`}
+            title="Workspace Settings"
+          >
+            <SettingsIcon className="w-4 h-4" />
+          </button>
 
           {/* Theme Selector */}
           <div

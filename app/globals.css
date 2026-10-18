@@ -58,6 +58,25 @@
   --key-shadow: rgba(0, 0, 0, 0.08);
 }
 
+[data-theme="forest"] {
+  --bg: #0c1612;
+  --panel: #13201a;
+  --panel-active: #192a23;
+  --border: #20332a;
+  --text: #e2ede6;
+  --text-muted: #647d70;
+  --accent: #3ecf8e;
+  --accent-contrast: #061f14;
+  --accent-soft: rgba(62, 207, 142, 0.12);
+  --error: #ff6b6b;
+  --error-soft: rgba(255, 107, 107, 0.12);
+  --radial-light: #16382b;
+  --radial-opacity: 0.38;
+  --grid-line: rgba(255, 255, 255, 0.04);
+  --key-highlight: rgba(255, 255, 255, 0.07);
+  --key-shadow: rgba(0, 0, 0, 0.45);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -83,6 +102,7 @@ html, body {
 
 /* Keycap styling with realistic top highlight and subtle press translation */
 .keycap {
+  font-family: var(--font-mono), monospace;
   border: 1px solid var(--border);
   background-color: var(--panel);
   border-radius: 6px;

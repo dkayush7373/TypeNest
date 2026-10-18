@@ -41,6 +41,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       label: 'Paper',
       desc: 'Crisp light workspace with deep forest teal contrast.',
     },
+    {
+      id: 'forest',
+      label: 'Forest',
+      desc: 'Deep pine obsidian base with vibrant emerald green accent.',
+    },
   ];
 
   const layouts: { id: KeyboardLayoutType; label: string; desc: string }[] = [
@@ -65,7 +70,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     <div className="w-full max-w-4xl flex flex-col space-y-8 animate-fadeIn">
       {/* Header */}
       <div className="pb-4 border-b border-[var(--border)]">
-        <h2 className="text-2xl font-bold tracking-tight text-[var(--text)]">
+        <h2 className="text-2xl font-bold tracking-normal text-[var(--text)]">
           Workspace Settings
         </h2>
         <p className="text-xs font-mono text-[var(--text-muted)] mt-1">
